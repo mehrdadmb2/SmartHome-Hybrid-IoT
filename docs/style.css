@@ -1,0 +1,39 @@
+body {
+  font-family: 'Segoe UI', Tahoma;
+  background: #0d1117;
+  color: #c9d1d9;
+  margin: 20px auto;
+  max-width: 900px;
+  text-align: center;
+}
+h1 { color: #58a6ff; margin-bottom: 20px; }
+.controls {
+  margin: 20px 0;
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  align-items: center;
+}
+select, input, button {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  background: #21262d;
+  color: #c9d1d9;
+  font-size: 16px;
+}
+.chart-container {
+  background: #161b22;
+  padding: 10px;
+  border-radius: 8px;
+  margin: 25px 0;
+}
+.door-stats table {
+  margin: 20px auto;
+  border-collapse: collapse;
+  width: 60%;
+}
+.door-stats th, .door-stats td {
+  border: 1px solid #30363d;
+  padding: 8px;
+}
