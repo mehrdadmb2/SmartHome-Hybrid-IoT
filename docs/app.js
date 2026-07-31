@@ -1,4 +1,4 @@
-const REPO_RAW = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/data/';
+const REPO_RAW = 'https://raw.githubusercontent.com/mehrdadmb2/SmartHome-Hybrid-IoT/main/data/';
 
 function getTodayStr() {
   const d = new Date();
