@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>خانه هوشمند - داخلی</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>🏠 داشبورد خانه</h1>
+
+  <div class="current-status">
+    <div class="card">
+      <h3>اتاق ۱ (ESP32)</h3>
+      <p>دما: <span id="t1">--</span>°C</p>
+      <p>رطوبت: <span id="h1">--</span>%</p>
+    </div>
+    <div class="card">
+      <h3>اتاق ۲ (ESP32-S3)</h3>
+      <p>دما: <span id="t2">--</span>°C</p>
+      <p>رطوبت: <span id="h2">--</span>%</p>
+    </div>
+    <div class="card">
+      <h3>🚪 درب</h3>
+      <p>باز شدن امروز: <span id="door-total">0</span></p>
+      <button id="open-door-btn">باز کردن درب</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <label>سنسور:
+      <select id="board-select">
+        <option value="esp32_1">اتاق ۱</option>
+        <option value="esp32_s3">اتاق ۲</option>
+      </select>
+    </label>
+    <label>بازه:
+      <select id="range-select">
+        <option value="daily">امروز</option>
+        <option value="hourly">ساعت اخیر</option>
+        <option value="weekly">هفتگی</option>
+        <option value="monthly">ماهانه</option>
+      </select>
+    </label>
+    <a href="/download/sensor1" download>⬇️ CSV اتاق ۱</a>
+    <a href="/download/sensor2" download>⬇️ CSV اتاق ۲</a>
+    <a href="/download/door" download>⬇️ CSV درب</a>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div class="door-stats">
+    <h3>جزئیات باز شدن درب امروز</h3>
+    <table id="door-table">
+      <thead><tr><th>تگ</th><th>تعداد</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script src="Chart.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
