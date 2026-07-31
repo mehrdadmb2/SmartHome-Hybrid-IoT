@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>خانه هوشمند - آنلاین</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>🌐 مانیتورینگ خانه</h1>
+
+  <div class="controls">
+    <label>سنسور:
+      <select id="board-select">
+        <option value="esp32_1">اتاق ۱</option>
+        <option value="esp32_s3">اتاق ۲</option>
+      </select>
+    </label>
+    <label>تاریخ:
+      <input type="date" id="date-picker">
+    </label>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div class="door-stats">
+    <h3>آمار درب</h3>
+    <p>تعداد باز شدن امروز: <span id="door-total">--</span></p>
+    <table id="door-table">
+      <thead><tr><th>تگ</th><th>تعداد</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
