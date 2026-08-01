@@ -1,9 +1,12 @@
 /*
- * SmartHome-Hybrid-IoT - ESP32 Hub (رفع DNS و آپلود)
+ * SmartHome-Hybrid-IoT - ESP32 Hub (Polling S3 + Node Status + Selective Download)
  * آی‌پی: 192.168.1.119
  * DNS: 8.8.8.8, 8.8.4.4
- * دانلود فایل‌ها از jsDelivr به جای raw.githubusercontent.com
- * آپلود داده‌ها به api.github.com (با DNS تنظیم‌شده)
+ * پین‌ها:
+ *  I2C OLED 128x64: SDA=5, SCL=4
+ *  DHT22: 13
+ *  SD: CS=15, MOSI=12, MISO=14, SCK=2
+ *  UART به آردوینو: RX2=16, TX2=17
  */
 
 #include <WiFi.h>
@@ -28,16 +31,14 @@ const char* password = "MEHRdAd1380";
 IPAddress localIP(192, 168, 1, 119);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
-IPAddress dns1(8, 8, 8, 8);        // DNS گوگل
-IPAddress dns2(8, 8, 4, 4);        // DNS دوم
+IPAddress dns1(8, 8, 8, 8);
+IPAddress dns2(8, 8, 4, 4);
 
-// ---------- گیت‌هاب (از jsDelivr برای دانلود، api.github.com برای آپلود) ----------
+// ---------- گیت‌هاب (jsDelivr برای دانلود، api.github.com برای آپلود) ----------
 String githubUser   = "mehrdadmb2";
 String githubRepo   = "SmartHome-Hybrid-IoT";
 String githubBranch = "main";
 String githubToken  = "";
-
-// URL های جدید
 const String SITE_BASE_URL = "https://cdn.jsdelivr.net/gh/" + githubUser + "/" + githubRepo + "@" + githubBranch + "/site/";
 const String API_BASE_URL  = "https://api.github.com/";
 
@@ -62,14 +63,18 @@ NTPClient timeClient(ntpUDP, "178.22.122.100", 3.5*3600, 60000);
 
 AsyncWebServer server(80);
 
+// داده‌های سنسورها
 float localTemp = 0, localHum = 0;
 float s3Temp = 0, s3Hum = 0;
-unsigned long lastS3Data = 0;
+unsigned long lastS3Data = 0;      // زمان آخرین دریافت موفق از S3
 unsigned long lastDoorEvent = 0;
-const unsigned long NODE_TIMEOUT = 600;
+const unsigned long NODE_TIMEOUT = 600; // ۱۰ دقیقه تا آفلاین شدن
 
+// زمان‌بندی‌ها
 unsigned long lastGitPush = 0;
-const unsigned long PUSH_INTERVAL = 30 * 60 * 1000;
+const unsigned long PUSH_INTERVAL = 30 * 60 * 1000;  // ۳۰ دقیقه
+unsigned long lastS3Poll = 0;
+const unsigned long POLL_INTERVAL = 10000;           // ۱۰ ثانیه
 
 // ---------- تاریخ شمسی ----------
 struct JalaliDate { int year, month, day; };
@@ -86,30 +91,28 @@ JalaliDate gregorianToJalali(int gy, int gm, int gd) {
   return {jy, jm, jd};
 }
 
-// ---------- سلف‌تست ----------
-void selfTest() {
-  Serial.println("\n========== SELF TEST START ==========");
-  
-  // 1. OLED
-  Serial.print("[1/7] OLED init... ");
+// ---------- راه‌اندازی ----------
+void setup() {
+  Serial.begin(115200);
+  delay(500);
   Wire.begin(I2C_SDA, I2C_SCL);
-  if (display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
-    Serial.println("OK");
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println("OLED fail");
+  } else {
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0,0);
     display.println("System Boot");
     display.display();
-    delay(1000);
-  } else Serial.println("FAILED");
+  }
 
-  // 2. SD
-  Serial.print("[2/7] SD Card init... ");
+  // SD
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
   delay(100);
-  if (SD.begin(SD_CS)) {
-    Serial.println("OK");
+  if (!SD.begin(SD_CS)) {
+    Serial.println("SD Mount Failed");
+  } else {
     if (!SD.exists("/data")) SD.mkdir("/data");
     if (!SD.exists("/www")) SD.mkdir("/www");
     File f = SD.open("/config.txt");
@@ -119,109 +122,67 @@ void selfTest() {
       if (line.startsWith("token ")) {
         githubToken = line.substring(6);
         githubToken.trim();
-        Serial.println("   GitHub token loaded.");
+        Serial.println("GitHub token loaded");
       }
       f.close();
     }
-  } else Serial.println("FAILED");
+  }
 
-  // 3. WiFi (با DNS)
-  Serial.print("[3/7] WiFi connect... ");
+  // WiFi
   WiFi.config(localIP, gateway, subnet, dns1, dns2);
   WiFi.begin(ssid, password);
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 40) {
-    delay(500); Serial.print("."); attempts++;
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println(" OK");
-    Serial.print("    IP: "); Serial.println(WiFi.localIP());
-    Serial.print("    DNS: "); Serial.print(dns1); Serial.print(", "); Serial.println(dns2);
-  } else Serial.println(" FAILED");
+  while (WiFi.status() != WL_CONNECTED) delay(500);
+  Serial.print("WiFi OK, IP: ");
+  Serial.println(WiFi.localIP());
 
-  // 4. تست DNS (ping raw.githubusercontent.com)
-  Serial.print("[4/7] DNS test (raw.githubusercontent.com)... ");
-  IPAddress testIP;
-  if (WiFi.hostByName("raw.githubusercontent.com", testIP)) {
-    Serial.print("OK IP: ");
-    Serial.println(testIP);
-  } else {
-    Serial.println("FAILED (cannot resolve)");
-  }
-
-  // 5. تست دانلود با jsDelivr (index.html)
-  Serial.print("[5/7] jsDelivr download test... ");
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.begin(SITE_BASE_URL + "index.html");
-    int code = http.GET();
-    if (code == 200) Serial.println("OK");
-    else Serial.printf("HTTP %d\n", code);
-    http.end();
-  } else Serial.println("SKIP");
-
-  // 6. NTP
-  Serial.print("[6/7] NTP sync... ");
+  // NTP
   timeClient.begin();
-  if (timeClient.update()) {
-    Serial.println("OK");
-    Serial.print("    Time: "); Serial.println(getTimeStr());
-  } else Serial.println("FAILED");
+  timeClient.update();
 
-  // 7. DHT22
-  Serial.print("[7/7] DHT22 test read... ");
+  // DHT22
   dht.begin();
-  delay(2000);
-  float t = dht.readTemperature();
-  float h = dht.readHumidity();
-  if (!isnan(t) && !isnan(h)) {
-    Serial.printf("OK (%.1f°C, %.1f%%)\n", t, h);
-    localTemp = t; localHum = h;
-    updateOLED(t, h);
-  } else Serial.println("FAILED");
 
-  Serial.println("========== SELF TEST COMPLETE ==========\n");
-}
+  // دانلود فایل‌های سایت از jsDelivr (فقط در صورت موفقیت بازنویسی)
+  if (WiFi.status() == WL_CONNECTED) {
+    const char* files[] = {"index.html", "style.css", "app.js", "Chart.min.js"};
+    for (auto filename : files) {
+      HTTPClient http;
+      String url = SITE_BASE_URL + filename;
+      Serial.printf("Downloading %s ... ", url.c_str());
+      http.begin(url);
+      int code = http.GET();
+      if (code == 200) {
+        String content = http.getString();
+        String path = "/www/" + String(filename);
+        // حذف فایل قبلی فقط در صورت موفقیت
+        if (SD.exists(path)) SD.remove(path);
+        File f = SD.open(path, FILE_WRITE);
+        if (f) {
+          f.print(content);
+          f.close();
+          Serial.printf("OK (%d bytes)\n", content.length());
+        } else {
+          Serial.println("SD write FAILED");
+        }
+      } else {
+        Serial.printf("HTTP %d (keeping old file)\n", code);
+      }
+      http.end();
+      delay(200);
+    }
+  }
 
-// ---------- راه‌اندازی ----------
-void setup() {
-  Serial.begin(115200);
-  delay(500);
-  Serial.println("\nSmartHome Hub starting...");
-  Wire.begin(I2C_SDA, I2C_SCL);
-  display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
-  display.clearDisplay(); display.display();
-  selfTest();
-
-  if (WiFi.status() == WL_CONNECTED) downloadWebFiles();
+  // اگر index.html وجود نداشت، یک پیش‌فرض ایجاد کن
   if (!SD.exists("/www/index.html")) {
     File f = SD.open("/www/index.html", FILE_WRITE);
-    if (f) { f.println("<html><body><h1>Hub Online</h1><p>Place web files in /www</p></body></html>"); f.close(); }
+    if (f) {
+      f.println("<html><body><h1>Hub Online</h1><p>Place web files in /www</p></body></html>");
+      f.close();
+    }
   }
 
   setupServer();
-  Serial.println("Hub ready. Web server started.");
-}
-
-// ---------- دانلود فایل‌های سایت (از jsDelivr) ----------
-void downloadWebFiles() {
-  const char* files[] = {"index.html", "style.css", "app.js", "Chart.min.js"};
-  for (auto filename : files) {
-    HTTPClient http;
-    String url = SITE_BASE_URL + String(filename);
-    Serial.printf("Downloading %s ... ", url.c_str());
-    http.begin(url);
-    int code = http.GET();
-    if (code == 200) {
-      String content = http.getString();
-      String path = "/www/" + String(filename);
-      if (SD.exists(path)) SD.remove(path);
-      File f = SD.open(path, FILE_WRITE);
-      if (f) { f.print(content); f.close(); Serial.printf("OK (%d bytes)\n", content.length()); }
-      else Serial.println("SD write FAILED");
-    } else Serial.printf("HTTP %d\n", code);
-    http.end(); delay(200);
-  }
+  Serial.println("Hub ready.");
 }
 
 // ---------- وب‌سرور ----------
@@ -230,10 +191,10 @@ void setupServer() {
     String html = "<html><body><h2>/www contents</h2><ul>";
     File root = SD.open("/www");
     if (root && root.isDirectory()) {
-      File file = root.openNextFile();
-      while (file) {
-        html += "<li>" + String(file.name()) + " (" + String(file.size()) + " bytes)</li>";
-        file = root.openNextFile();
+      File f = root.openNextFile();
+      while (f) {
+        html += "<li>" + String(f.name()) + " (" + String(f.size()) + " bytes)</li>";
+        f = root.openNextFile();
       }
       root.close();
     }
@@ -267,8 +228,9 @@ void setupServer() {
   server.on("/api/nodestatus", HTTP_GET, [](AsyncWebServerRequest *request){
     DynamicJsonDocument doc(256);
     doc["hub_online"] = true;
-    doc["s3_online"] = (millis() - lastS3Data < NODE_TIMEOUT * 1000);
-    doc["door_online"] = (millis() - lastDoorEvent < NODE_TIMEOUT * 1000);
+    unsigned long now = millis();
+    doc["s3_online"] = (lastS3Data == 0) ? false : (now - lastS3Data < NODE_TIMEOUT * 1000);
+    doc["door_online"] = (lastDoorEvent == 0) ? false : (now - lastDoorEvent < NODE_TIMEOUT * 1000);
     String out; serializeJson(doc, out);
     request->send(200, "application/json", out);
   });
@@ -343,10 +305,12 @@ void setupServer() {
 
   server.serveStatic("/", SD, "/www/").setDefaultFile("index.html");
   server.begin();
+  Serial.println("Web server started");
 }
 
 // ---------- حلقه اصلی ----------
 void loop() {
+  // خواندن سنسور محلی
   static unsigned long lastLocalRead = 0;
   if (millis() - lastLocalRead >= 5000) {
     lastLocalRead = millis();
@@ -360,6 +324,7 @@ void loop() {
     }
   }
 
+  // دریافت رویدادهای درب از Arduino
   while (Serial2.available()) {
     String line = Serial2.readStringUntil('\n'); line.trim();
     if (line.startsWith("DOOR_OPEN:")) {
@@ -368,6 +333,31 @@ void loop() {
     }
   }
 
+  // Polling از S3 هر ۱۰ ثانیه
+  if (millis() - lastS3Poll >= POLL_INTERVAL) {
+    lastS3Poll = millis();
+    HTTPClient http;
+    http.begin("http://192.168.1.115/api/status");
+    http.setTimeout(3000);
+    int code = http.GET();
+    if (code == 200) {
+      String payload = http.getString();
+      StaticJsonDocument<128> doc;
+      DeserializationError err = deserializeJson(doc, payload);
+      if (!err) {
+        s3Temp = doc["temp"];
+        s3Hum = doc["humidity"];
+        lastS3Data = millis();
+        logSensorCSV("esp32_s3", s3Temp, s3Hum);
+        Serial.println("S3 polled successfully");
+      }
+    } else {
+      Serial.printf("S3 poll failed (HTTP %d)\n", code);
+    }
+    http.end();
+  }
+
+  // آپلود گیت‌هاب
   if (millis() - lastGitPush >= PUSH_INTERVAL) {
     lastGitPush = millis();
     if (githubToken.length() > 0 && WiFi.status() == WL_CONNECTED) pushToGitHub();
@@ -494,7 +484,7 @@ void checkAndCleanSD() {
   }
 }
 
-// ---------- گیت‌هاب (آپلود با api.github.com) ----------
+// ---------- گیت‌هاب ----------
 void pushToGitHub() {
   String date = getISODate();
   String boards[] = {"esp32_1", "esp32_s3", "door"};
@@ -516,8 +506,9 @@ void pushToGitHub() {
   addGitHubFile("sdinfo.json", sdjson, sha);
 
   unsigned long now = millis();
-  bool s3online = (now - lastS3Data < NODE_TIMEOUT * 1000);
-  bool dooronline = (now - lastDoorEvent < NODE_TIMEOUT * 1000);
+  bool s3online = (lastS3Data == 0) ? false : (now - lastS3Data < NODE_TIMEOUT * 1000);
+  bool dooronline = (lastDoorEvent == 0) ? false : (now - lastDoorEvent < NODE_TIMEOUT * 1000);
+
   auto epochToISO = [&](unsigned long ms) -> String {
     time_t t = timeClient.getEpochTime() - ((millis() - ms) / 1000);
     struct tm *ti = gmtime(&t);
