@@ -1,10 +1,201 @@
-body { font-family: 'Segoe UI', Tahoma; background: #0d1117; color: #c9d1d9; margin: 20px auto; max-width: 1000px; text-align: center; }
-h1 { color: #58a6ff; }
-.datetime { font-size: 18px; margin-bottom: 10px; color: #8b949e; }
-.sd-info { margin-bottom: 20px; }
-.charts-container { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
-.chart-box { background: #161b22; padding: 15px; border-radius: 8px; width: 48%; min-width: 400px; }
-canvas { max-width: 100%; }
-.range-select, .date-picker { margin: 5px; padding: 6px; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 5px; }
-.door-table table { margin: 20px auto; border-collapse: collapse; width: 50%; }
-.door-table th, .door-table td { border: 1px solid #30363d; padding: 6px; }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+  background: #0a0a0f;
+  color: #e0e0e0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* پس‌زمینهٔ متحرک گرادینتی */
+.bg-animation {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: linear-gradient(135deg, #1a0033 0%, #0d1b3e 40%, #002b2b 70%, #1a0033 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
+  z-index: -1;
+  filter: blur(3px);
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.glass-container {
+  width: 95%;
+  max-width: 1400px;
+  margin: 2rem auto;
+  background: rgba(20, 25, 40, 0.45);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 2rem;
+  padding: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+}
+
+header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+h1 {
+  font-size: 2.2rem;
+  background: linear-gradient(45deg, #ff6ec7, #3b8dff, #00ffc3);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.5rem;
+}
+
+.datetime {
+  font-size: 1.1rem;
+  color: #9ba7c0;
+  letter-spacing: 1px;
+}
+
+/* کارت‌های بالای صفحه */
+.cards-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+  justify-content: center;
+  margin-bottom: 2.5rem;
+}
+
+.glass-card {
+  background: rgba(30, 35, 60, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 1.2rem;
+  padding: 1.2rem;
+  transition: transform 0.3s, box-shadow 0.3s;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+}
+
+.glass-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(0,160,255,0.2);
+  border-color: rgba(0, 200, 255, 0.4);
+}
+
+.sensor-card, .door-card, .sd-card {
+  flex: 1 1 220px;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.card-icon {
+  font-size: 2rem;
+}
+
+.card-content h3 {
+  font-size: 1rem;
+  color: #c0caf5;
+  margin-bottom: 0.4rem;
+}
+
+.card-content p {
+  font-size: 1.1rem;
+  color: #e0e0e0;
+}
+
+/* گرید نمودارها */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 1.8rem;
+  margin-bottom: 2rem;
+}
+
+.chart-box {
+  min-height: 350px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.chart-header h3 {
+  flex-grow: 1;
+  font-size: 1.1rem;
+  color: #ffb86c;
+}
+
+.range-select, .date-picker {
+  background: rgba(10, 15, 30, 0.6);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #e0e0e0;
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  backdrop-filter: blur(5px);
+}
+
+.chart-box canvas {
+  flex: 1;
+  max-height: 300px;
+}
+
+.door-table-wrapper {
+  margin-top: 1rem;
+  overflow-x: auto;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th, td {
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+}
+
+th {
+  background: rgba(0,0,0,0.3);
+  color: #ff79c6;
+}
+
+footer {
+  text-align: center;
+  margin-top: 2rem;
+  color: #6272a4;
+  font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+  .cards-row {
+    flex-direction: column;
+  }
+}
