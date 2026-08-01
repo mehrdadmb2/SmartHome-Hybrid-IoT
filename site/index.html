@@ -19,43 +19,23 @@
       </div>
     </header>
 
-    <!-- نوار وضعیت نودها -->
     <div class="node-status-bar glass">
       <div class="node"><span>🖥️ هاب</span><span class="status-dot" id="hub-status"></span></div>
       <div class="node"><span>🌡️ سنسور S3</span><span class="status-dot" id="s3-status"></span></div>
       <div class="node"><span>🚪 دربازکن</span><span class="status-dot" id="door-status"></span></div>
     </div>
 
-    <!-- کارت‌های زنده -->
     <div class="cards-row">
-      <div class="glass card">
-        <div class="card-icon">🌡️</div>
-        <h3 data-lang="room1">اتاق ۱</h3>
-        <p>دما: <span id="t1">--</span>°C | رطوبت: <span id="h1">--</span>%</p>
-      </div>
-      <div class="glass card">
-        <div class="card-icon">🌡️</div>
-        <h3 data-lang="room2">اتاق ۲ (S3)</h3>
-        <p>دما: <span id="t2">--</span>°C | رطوبت: <span id="h2">--</span>%</p>
-      </div>
-      <div class="glass card">
-        <div class="card-icon">🚪</div>
-        <h3 data-lang="door">درب</h3>
-        <p data-lang="doorOpen">امروز: <span id="door-total">0</span> بار</p>
-        <button id="open-door" class="neon-btn">باز کردن درب</button>
-      </div>
-      <div class="glass card">
-        <div class="card-icon">💾</div>
-        <h3 data-lang="sd">حافظه SD</h3>
-        <p>آزاد: <span id="sd-free">--</span>MB / <span id="sd-total">--</span>MB</p>
-      </div>
+      <div class="glass card"><div class="card-icon">🌡️</div><h3>اتاق ۱</h3><p>دما: <span id="t1">--</span>°C | رطوبت: <span id="h1">--</span>%</p></div>
+      <div class="glass card"><div class="card-icon">🌡️</div><h3>اتاق ۲ (S3)</h3><p>دما: <span id="t2">--</span>°C | رطوبت: <span id="h2">--</span>%</p></div>
+      <div class="glass card"><div class="card-icon">🚪</div><h3>درب</h3><p>امروز: <span id="door-total">0</span> بار</p><button id="open-door" class="neon-btn">باز کردن درب</button></div>
+      <div class="glass card"><div class="card-icon">💾</div><h3>حافظه SD</h3><p>آزاد: <span id="sd-free">--</span>MB / <span id="sd-total">--</span>MB</p></div>
     </div>
 
-    <!-- نمودارها -->
     <div class="charts-grid">
       <div class="glass chart-card">
         <div class="chart-header">
-          <h3 data-lang="chart1">نمودار اتاق ۱</h3>
+          <h3>نمودار اتاق ۱</h3>
           <select class="range-select" data-board="esp32_1">
             <option value="hourly">ساعتی</option>
             <option value="daily" selected>روزانه</option>
@@ -67,7 +47,7 @@
       </div>
       <div class="glass chart-card">
         <div class="chart-header">
-          <h3 data-lang="chart2">نمودار اتاق ۲</h3>
+          <h3>نمودار اتاق ۲</h3>
           <select class="range-select" data-board="esp32_s3">
             <option value="hourly">ساعتی</option>
             <option value="daily" selected>روزانه</option>
@@ -79,16 +59,11 @@
       </div>
     </div>
 
-    <!-- جدول تگ‌های درب -->
     <div class="glass table-card">
-      <h3 data-lang="doorTags">تگ‌های امروز</h3>
-      <table id="door-tags-table">
-        <thead><tr><th>تگ</th><th>دفعات</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <h3>تگ‌های امروز</h3>
+      <table id="door-tags-table"><thead><tr><th>تگ</th><th>دفعات</th></tr></thead><tbody></tbody></table>
     </div>
 
-    <!-- ===== مدیریت فایل‌ها ===== -->
     <div class="glass file-manager">
       <h2>📁 مدیریت فایل‌های SD</h2>
       <div class="file-toolbar">
@@ -96,13 +71,9 @@
         <button id="download-all" class="glass-btn">⬇️ دانلود همه</button>
         <label for="upload-input" class="glass-btn">📤 آپلود فایل</label>
         <input type="file" id="upload-input" multiple style="display:none">
-        <input type="text" id="upload-dir" placeholder="پوشه (مثلاً /www/)" value="/www/" class="glass-input">
+        <input type="text" id="upload-dir" placeholder="/www/" value="/www/" class="glass-input">
       </div>
-      <div id="upload-status" class="upload-status"></div>
-      <table id="file-table">
-        <thead><tr><th>نام فایل</th><th>حجم (KB)</th><th>عملیات</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <table id="file-table"><thead><tr><th>نام فایل</th><th>حجم (KB)</th><th>عملیات</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
