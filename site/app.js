@@ -6,16 +6,8 @@ document.documentElement.lang = lang;
 document.dir = lang === 'fa' ? 'rtl' : 'ltr';
 
 const translations = {
-  fa: {
-    title: '🏠 خانه هوشمند', room1: 'اتاق ۱', room2: 'اتاق ۲ (S3)',
-    door: '🚪 درب', doorOpen: 'امروز:', openDoor: 'باز کردن درب', sd: '💾 حافظه SD',
-    chart1: 'نمودار اتاق ۱', chart2: 'نمودار اتاق ۲', doorTags: 'تگ‌های امروز'
-  },
-  en: {
-    title: '🏠 Smart Home', room1: 'Room 1', room2: 'Room 2 (S3)',
-    door: '🚪 Door', doorOpen: 'Opened today:', openDoor: 'Open Door', sd: '💾 Storage',
-    chart1: 'Room 1 Chart', chart2: 'Room 2 Chart', doorTags: "Today's Tags"
-  }
+  fa: { title: '🏠 خانه هوشمند', room1: 'اتاق ۱', room2: 'اتاق ۲ (S3)', door: 'درب', doorOpen: 'امروز:', openDoor: 'باز کردن درب', sd: 'حافظه SD', chart1: 'نمودار اتاق ۱', chart2: 'نمودار اتاق ۲', doorTags: 'تگ‌های امروز' },
+  en: { title: '🏠 Smart Home', room1: 'Room 1', room2: 'Room 2 (S3)', door: 'Door', doorOpen: 'Opened today:', openDoor: 'Open Door', sd: 'Storage', chart1: 'Room 1 Chart', chart2: 'Room 2 Chart', doorTags: "Today's Tags" }
 };
 
 function applyLang() {
@@ -27,14 +19,13 @@ function applyLang() {
 applyLang();
 
 // Date/time
-async function updateDateTime() {
+setInterval(async () => {
   try {
     const r = await fetch(API+'/api/datetime');
     const d = await r.json();
     document.getElementById('datetime').innerHTML = `📅 ${d.shamsi} | ${d.gregorian}`;
   } catch(e) {}
-}
-setInterval(updateDateTime, 1000); updateDateTime();
+}, 1000);
 
 // Sensors
 async function updateSensors() {
@@ -78,13 +69,13 @@ async function updateNodes() {
   try {
     const r = await fetch(API+'/api/nodestatus');
     const d = await r.json();
-    setNode('node-hub', d.hub_online);
-    setNode('node-s3', d.s3_online);
-    setNode('node-door', d.door_online);
+    setNode('hub-status', d.hub_online);
+    setNode('s3-status', d.s3_online);
+    setNode('door-status', d.door_online);
   } catch(e) {}
 }
 function setNode(id, online) {
-  const dot = document.getElementById(id)?.querySelector('.status-dot');
+  const dot = document.getElementById(id);
   if (dot) {
     dot.style.background = online ? 'var(--green)' : 'var(--red)';
     dot.style.boxShadow = online ? '0 0 10px var(--green)' : '0 0 5px var(--red)';
@@ -127,7 +118,6 @@ document.querySelectorAll('.range-select').forEach(sel => {
     const board = sel.dataset.board;
     drawChart(board, board==='esp32_1'?'chart1':'chart2', sel.value);
   });
-  // initial
   const board = sel.dataset.board;
   drawChart(board, board==='esp32_1'?'chart1':'chart2', sel.value);
 });
