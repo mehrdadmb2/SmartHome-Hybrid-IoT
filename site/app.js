@@ -143,3 +143,117 @@ document.getElementById('lang-toggle').addEventListener('click', () => {
   localStorage.setItem('lang', lang);
   applyLang();
 });
+
+// ======================== FILE MANAGER ========================
+const fileTableBody = document.querySelector('#file-table tbody');
+const uploadStatus = document.getElementById('upload-status');
+
+// بارگذاری لیست فایل‌ها
+async function loadFileList() {
+  try {
+    const res = await fetch(API + '/api/files');
+    const files = await res.json();
+    fileTableBody.innerHTML = '';
+    if (files.length === 0) {
+      fileTableBody.innerHTML = '<tr><td colspan="3">هیچ فایلی یافت نشد</td></tr>';
+      return;
+    }
+    files.forEach(file => {
+      const row = document.createElement('tr');
+      const sizeKB = (file.size / 1024).toFixed(1);
+      row.innerHTML = `
+        <td>${file.name}</td>
+        <td>${sizeKB}</td>
+        <td>
+          <button class="file-action-btn download-btn" data-path="${file.path}">⬇️ دانلود</button>
+          <button class="file-action-btn delete-btn" data-path="${file.path}">🗑️ حذف</button>
+        </td>
+      `;
+      fileTableBody.appendChild(row);
+    });
+
+    // اتصال رویدادها به دکمه‌های دانلود و حذف
+    document.querySelectorAll('.download-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const path = e.target.dataset.path;
+        window.open(API + '/api/download?path=' + encodeURIComponent(path), '_blank');
+      });
+    });
+
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const path = e.target.dataset.path;
+        if (confirm(`آیا از حذف ${path} مطمئن هستید؟`)) {
+          const res = await fetch(API + '/api/delete?path=' + encodeURIComponent(path));
+          if (res.ok) {
+            loadFileList(); // بروزرسانی لیست
+          } else {
+            alert('حذف ناموفق');
+          }
+        }
+      });
+    });
+  } catch (err) {
+    fileTableBody.innerHTML = '<tr><td colspan="3">خطا در بارگذاری فایل‌ها</td></tr>';
+  }
+}
+
+// دانلود همه فایل‌ها (باز کردن تک‌تک با تأخیر)
+async function downloadAllFiles() {
+  try {
+    const res = await fetch(API + '/api/files');
+    const files = await res.json();
+    if (files.length === 0) {
+      alert('هیچ فایلی برای دانلود وجود ندارد');
+      return;
+    }
+    let index = 0;
+    function downloadNext() {
+      if (index >= files.length) return;
+      const file = files[index];
+      const url = API + '/api/download?path=' + encodeURIComponent(file.path);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      index++;
+      setTimeout(downloadNext, 500); // تأخیر ۵۰۰ میلی‌ثانیه بین هر دانلود
+    }
+    downloadNext();
+    uploadStatus.textContent = 'دانلود همه فایل‌ها شروع شد...';
+  } catch (e) {
+    alert('خطا در دریافت لیست فایل‌ها');
+  }
+}
+
+// آپلود فایل
+document.getElementById('upload-input').addEventListener('change', async (e) => {
+  const files = e.target.files;
+  if (!files.length) return;
+  const dir = document.getElementById('upload-dir').value || '/www/';
+  uploadStatus.textContent = 'در حال آپلود...';
+
+  for (let file of files) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(API + '/api/upload?dir=' + encodeURIComponent(dir), {
+      method: 'POST',
+      body: formData
+    });
+    if (res.ok) {
+      uploadStatus.textContent += ` ${file.name} آپلود شد.`;
+    } else {
+      uploadStatus.textContent += ` خطا در آپلود ${file.name}.`;
+    }
+  }
+  loadFileList(); // بروزرسانی لیست
+});
+
+// دکمه‌های مدیریت فایل
+document.getElementById('refresh-files').addEventListener('click', loadFileList);
+document.getElementById('download-all').addEventListener('click', downloadAllFiles);
+
+// بارگذاری اولیه لیست فایل
+loadFileList();
