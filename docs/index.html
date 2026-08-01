@@ -3,19 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>خانه هوشمند – پنل آنلاین</title>
+  <title>خانه هوشمند – پنل سایبری</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="bg-animation"></div>
+  <!-- پس‌زمینهٔ کهکشان -->
+  <div class="galaxy-bg"></div>
 
-  <div class="glass-container">
+  <div class="cyber-container">
     <header>
-      <h1>🏠 پنل مانیتورینگ هوشمند</h1>
-      <div class="datetime" id="datetime">در حال بارگذاری...</div>
+      <h1 class="glitch" data-text="پنل مانیتورینگ سایبری">پنل مانیتورینگ سایبری</h1>
+      <div class="datetime" id="datetime">...</div>
     </header>
 
-    <!-- کارت‌های وضعیت لحظه‌ای -->
+    <!-- پنل وضعیت نودها -->
+    <div class="status-panel glass-card">
+      <h2>وضعیت نودها</h2>
+      <div class="node-grid">
+        <div class="node" id="node-hub">
+          <span class="node-icon">🖥️</span>
+          <span class="node-name">هاب (ESP32)</span>
+          <span class="node-status" id="status-hub">●</span>
+          <span class="node-time" id="time-hub"></span>
+        </div>
+        <div class="node" id="node-s3">
+          <span class="node-icon">🌡️</span>
+          <span class="node-name">سنسور S3</span>
+          <span class="node-status" id="status-s3">●</span>
+          <span class="node-time" id="time-s3"></span>
+        </div>
+        <div class="node" id="node-door">
+          <span class="node-icon">🚪</span>
+          <span class="node-name">دربازکن</span>
+          <span class="node-status" id="status-door">●</span>
+          <span class="node-time" id="time-door"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- کارت‌های لحظه‌ای -->
     <div class="cards-row">
       <div class="glass-card sensor-card">
         <div class="card-icon">🌡️</div>
@@ -47,7 +73,7 @@
       </div>
     </div>
 
-    <!-- گرید نمودارها (۲×۲) -->
+    <!-- گرید نمودارها -->
     <div class="charts-grid">
       <!-- سنسور ۱ -->
       <div class="chart-box glass-card">
@@ -79,11 +105,11 @@
         <canvas id="chart2"></canvas>
       </div>
 
-      <!-- آمار درب (نمودار میله‌ای) -->
+      <!-- درب -->
       <div class="chart-box glass-card">
         <div class="chart-header">
-          <h3>آمار بازشدن درب امروز</h3>
-          <input type="date" class="date-picker" id="door-date-picker">
+          <h3>آمار درب</h3>
+          <input type="date" id="door-date-picker">
         </div>
         <canvas id="chart3"></canvas>
         <div class="door-table-wrapper">
@@ -94,10 +120,10 @@
         </div>
       </div>
 
-      <!-- حافظهٔ SD (دایره‌ای) -->
+      <!-- SD -->
       <div class="chart-box glass-card">
         <div class="chart-header">
-          <h3>وضعیت حافظه SD</h3>
+          <h3>وضعیت حافظه</h3>
         </div>
         <canvas id="chart4"></canvas>
       </div>
