@@ -1,8 +1,7 @@
 /*
- * SmartHome-Hybrid-IoT - ESP32 Hub (نسخه پایدار نهایی)
+ * SmartHome-Hybrid-IoT - ESP32 Hub (FINAL STABLE)
  * آی‌پی: 192.168.1.119 | DNS: 8.8.8.8, 8.8.4.4 | NTP: 178.22.122.100
  * پین‌ها: SDA=5,SCL=4 | DHT22=13 | SD: CS=15,MOSI=12,MISO=14,SCK=2 | UART: RX2=16,TX2=17
- * بدون Watchdog اضافی و بدون JSON Documentهای سراسری.
  */
 
 #include <WiFi.h>
@@ -70,6 +69,8 @@ const unsigned long PUSH_INTERVAL = 5 * 60 * 1000;  // ۵ دقیقه
 unsigned long lastS3Poll = 0;
 const unsigned long POLL_INTERVAL = 10000;
 
+const size_t MAX_CSV_SIZE = 1900; // 1.9 کیلوبایت
+
 // ---------- تاریخ شمسی ----------
 struct JalaliDate { int year, month, day; };
 JalaliDate gregorianToJalali(int gy, int gm, int gd) {
@@ -93,19 +94,24 @@ void setup() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
     Serial.println("OLED fail");
   } else {
-    display.clearDisplay(); display.setCursor(0,0); display.println("System Boot"); display.display();
+    display.clearDisplay(); display.setCursor(0,0); display.println("Booting..."); display.display();
   }
 
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
   delay(100);
-  if (!SD.begin(SD_CS)) Serial.println("SD Mount Failed");
-  else {
+  if (!SD.begin(SD_CS)) {
+    Serial.println("SD Mount Failed");
+  } else {
     if (!SD.exists("/data")) SD.mkdir("/data");
     if (!SD.exists("/www")) SD.mkdir("/www");
     File f = SD.open("/config.txt");
     if (f) {
       String line = f.readStringUntil('\n'); line.trim();
-      if (line.startsWith("token ")) { githubToken = line.substring(6); githubToken.trim(); }
+      if (line.startsWith("token ")) {
+        githubToken = line.substring(6);
+        githubToken.trim();
+        Serial.println("GitHub token loaded");
+      }
       f.close();
     }
   }
@@ -113,9 +119,11 @@ void setup() {
   WiFi.config(localIP, gateway, subnet, dns1, dns2);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) delay(500);
-  Serial.print("WiFi OK, IP: "); Serial.println(WiFi.localIP());
+  Serial.print("WiFi OK, IP: ");
+  Serial.println(WiFi.localIP());
 
-  timeClient.begin(); timeClient.update();
+  timeClient.begin();
+  timeClient.update();
   dht.begin();
 
   // دانلود فایل‌های سایت
@@ -126,17 +134,24 @@ void setup() {
       String url = SITE_BASE_URL + filename;
       Serial.printf("Downloading %s ... ", url.c_str());
       http.begin(url);
+      http.setTimeout(15000);
       int code = http.GET();
       if (code == 200) {
         String content = http.getString();
         String path = "/www/" + String(filename);
         if (SD.exists(path)) SD.remove(path);
         File f = SD.open(path, FILE_WRITE);
-        if (f) { f.print(content); f.close(); Serial.printf("OK (%d bytes)\n", content.length()); }
-      } else Serial.printf("HTTP %d\n", code);
-      http.end(); delay(200);
+        if (f) {
+          f.print(content);
+          f.close();
+          Serial.printf("OK (%d bytes)\n", content.length());
+        } else Serial.println("SD write FAILED");
+      } else Serial.printf("HTTP %d (keeping local file)\n", code);
+      http.end();
+      delay(200);
     }
   }
+
   if (!SD.exists("/www/index.html")) {
     File f = SD.open("/www/index.html", FILE_WRITE);
     if (f) f.println("<html><body><h1>Hub Online</h1></body></html>");
@@ -152,11 +167,15 @@ void setupServer() {
   server.serveStatic("/", SD, "/www/").setDefaultFile("index.html");
 
   server.on("/api/debug", HTTP_GET, [](AsyncWebServerRequest *request){
-    String html = "<html><body><h2>/www</h2><ul>";
+    String html = "<html><body><h2>/www contents</h2><ul>";
     File root = SD.open("/www");
     if (root && root.isDirectory()) {
       File f = root.openNextFile();
-      while (f) { html += "<li>" + String(f.name()) + " (" + String(f.size()) + ")</li>"; f = root.openNextFile(); }
+      while (f) {
+        html += "<li>" + String(f.name()) + " (" + String(f.size()) + " bytes)</li>";
+        f = root.openNextFile();
+      }
+      root.close();
     }
     html += "</ul></body></html>";
     request->send(200, "text/html", html);
@@ -177,8 +196,10 @@ void setupServer() {
 
   server.on("/api/current", HTTP_GET, [](AsyncWebServerRequest *request){
     StaticJsonDocument<300> doc;
-    doc["esp32_1_temp"] = localTemp; doc["esp32_1_hum"] = localHum;
-    doc["esp32_s3_temp"] = s3Temp; doc["esp32_s3_hum"] = s3Hum;
+    doc["esp32_1_temp"] = localTemp;
+    doc["esp32_1_hum"] = localHum;
+    doc["esp32_s3_temp"] = s3Temp;
+    doc["esp32_s3_hum"] = s3Hum;
     String out; serializeJson(doc, out);
     request->send(200, "application/json", out);
   });
@@ -203,22 +224,30 @@ void setupServer() {
 
   server.on("/api/stats/door", HTTP_GET, [](AsyncWebServerRequest *request){
     String date = request->hasParam("date") ? request->getParam("date")->value() : getISODate();
-    String filename = "/data/door_" + date + ".csv";
-    File f = SD.open(filename);
-    if (!f) {
-      request->send(200, "application/json", "{\"total\":0,\"tags\":[]}");
-      return;
+    std::map<String, int> tagCount;
+    int total = 0;
+    File dir = SD.open("/data");
+    if (dir && dir.isDirectory()) {
+      while (File entry = dir.openNextFile()) {
+        String name = entry.name();
+        if (name.startsWith("door_" + date) && name.endsWith(".csv")) {
+          File f = SD.open("/data/" + name);
+          if (f) {
+            f.readStringUntil('\n');
+            while (f.available()) {
+              String line = f.readStringUntil('\n'); line.trim();
+              if (line.isEmpty()) continue;
+              int c2 = line.indexOf(',', line.indexOf(',')+1);
+              String tag = line.substring(c2+1); tag.trim();
+              tagCount[tag]++; total++;
+            }
+            f.close();
+          }
+        }
+        entry.close();
+      }
+      dir.close();
     }
-    f.readStringUntil('\n');
-    std::map<String, int> tagCount; int total = 0;
-    while (f.available()) {
-      String line = f.readStringUntil('\n'); line.trim();
-      if (line.isEmpty()) continue;
-      int c2 = line.indexOf(',', line.indexOf(',')+1);
-      String tag = line.substring(c2+1); tag.trim();
-      tagCount[tag]++; total++;
-    }
-    f.close();
     StaticJsonDocument<4096> doc;
     doc["date"] = date; doc["total"] = total;
     JsonArray tags = doc.createNestedArray("tags");
@@ -258,22 +287,29 @@ void setupServer() {
   server.on("/download/sensor2", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(SD, "/data/esp32_s3_" + getISODate() + ".csv", "text/csv", true); });
   server.on("/download/door", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(SD, "/data/door_" + getISODate() + ".csv", "text/csv", true); });
 
-  // مدیریت فایل
+  // مدیریت فایل (اصلاح مسیر کامل)
   server.on("/api/files", HTTP_GET, [](AsyncWebServerRequest *request){
     StaticJsonDocument<8192> doc;
     JsonArray items = doc.to<JsonArray>();
-    std::function<void(String)> listDir = [&](String dirPath) {
+    std::function<void(String, String)> listDir = [&](String dirPath, String base) {
       File dir = SD.open(dirPath);
       if (!dir || !dir.isDirectory()) return;
       while (File entry = dir.openNextFile()) {
+        String fullPath = base + "/" + entry.name();
+        fullPath.replace("//", "/");
         JsonObject item = items.createNestedObject();
-        String fullPath = String(entry.name()); if (fullPath.startsWith("/")) fullPath = fullPath.substring(1);
-        item["name"] = entry.name(); item["path"] = "/" + fullPath; item["size"] = entry.size(); item["is_dir"] = entry.isDirectory();
+        item["name"] = entry.name();
+        item["path"] = fullPath;
+        item["size"] = entry.size();
+        item["is_dir"] = entry.isDirectory();
+        if (entry.isDirectory()) {
+          listDir(fullPath, fullPath);
+        }
         entry.close();
       }
       dir.close();
     };
-    listDir("/");
+    listDir("/", "");
     String out; serializeJson(doc, out);
     request->send(200, "application/json", out);
   });
@@ -309,6 +345,7 @@ void setupServer() {
   });
 
   server.begin();
+  Serial.println("Web server started");
 }
 
 // ---------- حلقه اصلی ----------
@@ -334,7 +371,7 @@ void loop() {
     }
   }
 
-  if (millis() - lastS3Poll >= POLL_INTERVAL) {
+  if (millis() - lastS3Poll >= POLL_INTERVAL && WiFi.status() == WL_CONNECTED) {
     lastS3Poll = millis();
     HTTPClient http;
     http.begin("http://192.168.1.115/api/status");
@@ -347,34 +384,54 @@ void loop() {
         s3Temp = doc["temp"]; s3Hum = doc["humidity"];
         lastS3Data = millis();
         logSensorCSV("esp32_s3", s3Temp, s3Hum);
-        Serial.println("S3 polled");
+        Serial.println("S3 polled successfully");
       }
-    } else Serial.printf("S3 poll HTTP %d\n", code);
+    } else {
+      Serial.printf("S3 poll failed (HTTP %d)\n", code);
+    }
     http.end();
   }
 
   if (millis() - lastGitPush >= PUSH_INTERVAL) {
     lastGitPush = millis();
-    if (githubToken.length() > 0 && WiFi.status() == WL_CONNECTED) pushToGitHub();
+    if (githubToken.length() > 0 && WiFi.status() == WL_CONNECTED) {
+      pushToGitHub();
+    }
   }
+  yield();
 }
 
-// ---------- CSV ----------
+// ---------- CSV با تقسیم خودکار ----------
 void logSensorCSV(const String& board, float t, float h) {
   String date = getISODate();
-  String filename = "/data/" + board + "_" + date + ".csv";
+  String baseName = "/data/" + board + "_" + date + ".csv";
   String line = getTimeStr() + "," + String(t,1) + "," + String(h,1);
-  appendCSV(filename, line, "time,temperature,humidity");
+  appendCSV(baseName, line, "time,temperature,humidity");
 }
 
 void logDoorEvent(String tag) {
   String date = getISODate();
-  String filename = "/data/door_" + date + ".csv";
+  String baseName = "/data/door_" + date + ".csv";
   String line = getTimeStr() + ",open," + tag;
-  appendCSV(filename, line, "time,event,tag");
+  appendCSV(baseName, line, "time,event,tag");
 }
 
-void appendCSV(const String& filename, const String& line, const String& header) {
+void appendCSV(const String& baseFilename, const String& line, const String& header) {
+  int part = 1;
+  String filename = baseFilename;
+  while (SD.exists(filename)) {
+    File f = SD.open(filename, FILE_READ);
+    if (f) {
+      if (f.size() + line.length() + 1 < MAX_CSV_SIZE) {
+        f.close();
+        break;
+      }
+      f.close();
+    }
+    part++;
+    filename = baseFilename + "_" + String(part);
+  }
+
   if (!SD.exists(filename)) {
     File f = SD.open(filename, FILE_WRITE);
     if (f) { f.println(header); f.close(); }
@@ -386,8 +443,8 @@ void appendCSV(const String& filename, const String& line, const String& header)
 // ---------- بازه‌های زمانی ----------
 String getDataRange(const String& board, const String& range, const String& refDate) {
   std::vector<String> dates;
-  if (range == "daily") dates.push_back(refDate);
-  else if (range == "hourly") dates.push_back(refDate);
+  if (range == "daily") { dates.push_back(refDate); }
+  else if (range == "hourly") { dates.push_back(refDate); }
   else {
     int y, m, d;
     sscanf(refDate.c_str(), "%d-%d-%d", &y, &m, &d);
@@ -403,25 +460,35 @@ String getDataRange(const String& board, const String& range, const String& refD
     std::reverse(dates.begin(), dates.end());
   }
 
-  static DynamicJsonDocument doc(16384);  // <-- static, not on stack!
+  static DynamicJsonDocument doc(16384);
   doc.clear();
   JsonArray arr = doc.to<JsonArray>();
   for (auto date : dates) {
-    String filename = "/data/" + board + "_" + date + ".csv";
-    if (!SD.exists(filename)) continue;
-    File f = SD.open(filename); if (!f) continue;
-    f.readStringUntil('\n');
-    while (f.available() && !arr.isNull()) {
-      String line = f.readStringUntil('\n'); line.trim();
-      if (line.isEmpty()) continue;
-      JsonObject obj = arr.createNestedObject();
-      int c1 = line.indexOf(','), c2 = line.indexOf(',', c1+1);
-      obj["time"] = line.substring(0, c1);
-      obj["temp"] = line.substring(c1+1, c2).toFloat();
-      obj["humidity"] = line.substring(c2+1).toFloat();
-      if (arr.size() > 1000) break;
+    File dir = SD.open("/data");
+    if (dir && dir.isDirectory()) {
+      while (File entry = dir.openNextFile()) {
+        String name = entry.name();
+        if (name.startsWith(board + "_" + date) && name.endsWith(".csv")) {
+          File f = SD.open("/data/" + name);
+          if (f) {
+            f.readStringUntil('\n');
+            while (f.available() && !arr.isNull()) {
+              String line = f.readStringUntil('\n'); line.trim();
+              if (line.isEmpty()) continue;
+              JsonObject obj = arr.createNestedObject();
+              int c1 = line.indexOf(','), c2 = line.indexOf(',', c1+1);
+              obj["time"] = line.substring(0, c1);
+              obj["temp"] = line.substring(c1+1, c2).toFloat();
+              obj["humidity"] = line.substring(c2+1).toFloat();
+              if (arr.size() > 1000) break;
+            }
+            f.close();
+          }
+        }
+        entry.close();
+      }
+      dir.close();
     }
-    f.close();
   }
   if (range == "hourly" && arr.size() > 0) {
     String lastTime = arr[arr.size()-1]["time"];
@@ -463,17 +530,34 @@ void checkAndCleanSD() {
   }
 }
 
-// ---------- گیت‌هاب (استفاده از static برای pushDoc) ----------
+// ---------- گیت‌هاب ----------
 void pushToGitHub() {
   String date = getISODate();
   String boards[] = {"esp32_1", "esp32_s3", "door"};
   for (auto board : boards) {
-    String content = readFile(("/data/" + board + "_" + date + ".csv").c_str());
-    if (content.isEmpty()) continue;
-    String path = "data/" + board + "_" + date + ".csv";
-    String sha = getGitSHA(path);
-    addGitHubFile(path, content, sha);
-    delay(1000);
+    std::vector<String> files;
+    File dir = SD.open("/data");
+    if (dir && dir.isDirectory()) {
+      while (File entry = dir.openNextFile()) {
+        String name = entry.name();
+        if (name.startsWith(board + "_" + date) && name.endsWith(".csv")) {
+          files.push_back("/data/" + name);
+        }
+        entry.close();
+      }
+      dir.close();
+    }
+    std::sort(files.begin(), files.end());
+
+    for (auto filePath : files) {
+      String content = readFile(filePath.c_str());
+      if (content.isEmpty()) continue;
+      String gitPath = "data/" + filePath.substring(filePath.lastIndexOf('/') + 1);
+      String sha = getGitSHA(gitPath);
+      addGitHubFile(gitPath, content, sha);
+      delay(1000);
+      yield();
+    }
   }
 
   static DynamicJsonDocument sdDoc(256);
@@ -526,7 +610,7 @@ String getGitSHA(const String& path) {
 }
 
 void addGitHubFile(const String& path, const String& content, const String& sha) {
-  static DynamicJsonDocument pushDoc(32768);  // <-- static, off stack
+  static DynamicJsonDocument pushDoc(8192);
   pushDoc.clear();
   size_t encLen = 4 * ((content.length() + 2) / 3);
   unsigned char enc[encLen+1];
