@@ -78,14 +78,18 @@ const unsigned long POLL_INTERVAL = 10000;           // ۱۰ ثانیه
 
 // ---------- تاریخ شمسی ----------
 struct JalaliDate { int year, month, day; };
-JalaliDate gregorianToJalali(int gy, int gm, int gd) {
+JalaliDate gregorianToJalali(int g_y, int g_m, int g_d) {
+  int gy = g_y, gm = g_m, gd = g_d;
   int gy2 = (gm > 2) ? (gy + 1) : gy;
   int days = 355666 + (365 * gy) + ((gy2 + 3) / 4) - ((gy2 + 99) / 100) + ((gy2 + 399) / 400) + gd + (153 * (gm > 2 ? (gm - 3) : (gm + 9)) + 2) / 5;
   int jy = -1595 + (33 * (days / 12053));
   days %= 12053;
   jy += 4 * (days / 1461);
   days %= 1461;
-  if (days > 365) { jy += (days - 1) / 365; days = (days - 1) % 365; }
+  if (days > 365) {
+    jy += (days - 1) / 365;
+    days = (days - 1) % 365;
+  }
   int jm = (days < 186) ? 1 + days / 31 : 7 + (days - 186) / 30;
   int jd = 1 + ((days < 186) ? (days % 31) : ((days - 186) % 30));
   return {jy, jm, jd};
