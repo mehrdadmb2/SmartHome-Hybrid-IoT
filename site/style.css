@@ -1,56 +1,14 @@
-body {
-  font-family: 'Segoe UI', Tahoma;
-  background: #0d1117;
-  color: #c9d1d9;
-  margin: 20px auto;
-  max-width: 900px;
-  text-align: center;
-}
-h1 { color: #58a6ff; margin-bottom: 20px; }
-.current-status {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  flex-wrap: wrap;
-  margin-bottom: 25px;
-}
-.card {
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 15px 20px;
-  min-width: 180px;
-}
-.controls {
-  margin: 20px 0;
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-select, button, a {
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid #30363d;
-  background: #21262d;
-  color: #c9d1d9;
-  font-size: 16px;
-  text-decoration: none;
-}
-button { background: #238636; cursor: pointer; }
-.chart-container {
-  background: #161b22;
-  padding: 10px;
-  border-radius: 8px;
-  margin: 25px 0;
-}
-.door-stats table {
-  margin: 20px auto;
-  border-collapse: collapse;
-  width: 60%;
-}
-.door-stats th, .door-stats td {
-  border: 1px solid #30363d;
-  padding: 8px;
-}
+body { font-family: 'Segoe UI', Tahoma; background: #0d1117; color: #c9d1d9; margin: 20px auto; max-width: 1000px; text-align: center; }
+h1 { color: #58a6ff; margin-bottom: 10px; }
+.datetime { font-size: 18px; margin-bottom: 20px; color: #8b949e; }
+.status-cards { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 25px; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 18px; min-width: 150px; }
+button { background: #238636; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
+button:hover { background: #2ea043; }
+.charts-container { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+.chart-box { background: #161b22; padding: 15px; border-radius: 8px; width: 48%; min-width: 400px; }
+canvas { max-width: 100%; }
+.range-select { margin-bottom: 10px; padding: 6px; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 5px; }
+.door-table table { margin: 20px auto; border-collapse: collapse; width: 50%; }
+.door-table th, .door-table td { border: 1px solid #30363d; padding: 6px; }
+a { color: #58a6ff; margin: 0 10px; }
