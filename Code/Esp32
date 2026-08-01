@@ -1,11 +1,18 @@
 /*
- * SmartHome-Hybrid-IoT - ESP32 Hub
+ * SmartHome-Hybrid-IoT - ESP32 Hub نهایی
  * آی‌پی: 192.168.1.119
  * پین‌ها:
  *  I2C OLED 128x64: SDA=5, SCL=4
  *  DHT22: 13
  *  SD: CS=27, MOSI=23, MISO=19, SCK=18
  *  UART به آردوینو: RX2=16, TX2=17
+ *
+ * امکانات جدید:
+ *  - نمایش اطلاعات SD روی سایت
+ *  - تاریخ شمسی + میلادی
+ *  - پاک‌سازی خودکار SD
+ *  - API برای بازه‌های زمانی (hourly, weekly, monthly)
+ *  - دانلود خودکار فایل‌های سایت از گیت‌هاب
  */
 
 #include <WiFi.h>
@@ -21,16 +28,19 @@
 #include <mbedtls/base64.h>
 #include <time.h>
 #include <map>
+#include <vector>
+#include <algorithm>
 
 // ---------- تنظیمات شبکه ----------
 const char* ssid     = ">><<>><<";
 const char* password = "MEHRdAd1380";
 
 // ---------- گیت‌هاب ----------
-String githubUser   = "YOUR_USERNAME";   // ← جایگزین کن
-String githubRepo   = "YOUR_REPO";       // ← جایگزین کن
+String githubUser   = "mehrdadmb2";
+String githubRepo   = "SmartHome-Hybrid-IoT";
 String githubBranch = "main";
-String githubToken  = "";                // از /config.txt خوانده می‌شود
+String githubToken  = "";                 // از /config.txt خوانده می‌شود
+const char* GITHUB_RAW = "https://raw.githubusercontent.com/mehrdadmb2/SmartHome-Hybrid-IoT/main/site/";
 
 // ---------- پین‌ها ----------
 #define I2C_SDA   5
@@ -55,12 +65,27 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", 3.5*3600, 60000);  // UTC+3:30
 
 AsyncWebServer server(80);
 
-// داده‌های لحظه‌ای برای API
+// داده‌های لحظه‌ای
 float localTemp = 0, localHum = 0;
 float s3Temp = 0, s3Hum = 0;
 
 unsigned long lastGitPush = 0;
 const unsigned long PUSH_INTERVAL = 30 * 60 * 1000;  // ۳۰ دقیقه
+
+// ---------- تابع تبدیل تاریخ میلادی به شمسی (ساده‌شده) ----------
+struct JalaliDate { int year, month, day; };
+JalaliDate gregorianToJalali(int gy, int gm, int gd) {
+  int gy2 = (gm > 2) ? (gy + 1) : gy;
+  int days = 355666 + (365 * gy) + ((gy2 + 3) / 4) - ((gy2 + 99) / 100) + ((gy2 + 399) / 400) + gd + (153 * (gm > 2 ? (gm - 3) : (gm + 9)) + 2) / 5;
+  int jy = -1595 + (33 * (days / 12053));
+  days %= 12053;
+  jy += 4 * (days / 1461);
+  days %= 1461;
+  if (days > 365) { jy += (days - 1) / 365; days = (days - 1) % 365; }
+  int jm = (days < 186) ? 1 + days / 31 : 7 + (days - 186) / 30;
+  int jd = 1 + ((days < 186) ? (days % 31) : ((days - 186) % 30));
+  return {jy, jm, jd};
+}
 
 // ---------- راه‌اندازی اولیه ----------
 void setup() {
@@ -78,166 +103,26 @@ void setup() {
 
   initSD();
   loadConfig();
-
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) delay(500);
-  Serial.println("WiFi OK, IP: " + WiFi.localIP().toString());
+  connectWiFi();
+  downloadWebFiles();   // ← به‌روزرسانی خودکار سایت از گیت‌هاب
 
   timeClient.begin();
   dht.begin();
 
-  // -------- API Endpoints --------
-  // دریافت داده از ESP32-S3
-  server.on("/api/sensor", HTTP_POST, [](AsyncWebServerRequest *request){
-    if (request->hasParam("plain", true)) {
-      String body = request->getParam("plain", true)->value();
-      StaticJsonDocument<200> doc;
-      deserializeJson(doc, body);
-      const char* board = doc["board"];
-      float t = doc["temp"];
-      float h = doc["humidity"];
-      if (String(board) == "esp32_s3") {
-        s3Temp = t; s3Hum = h;
-        logSensorCSV("esp32_s3", t, h);
-      }
-    }
-    request->send(200);
-  });
-
-  // دریافت رویداد درب از UART (در loop پردازش می‌شود)
-  // اما می‌توان یک API هم برای لاگ خارجی داشت (استفاده نشده)
-
-  // دریافت داده‌های سنسور برای نمودار (تبدیل CSV به JSON)
-  server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest *request){
-    String board = request->getParam("board")->value();
-    String date = getISODate();
-    if (request->hasParam("date")) date = request->getParam("date")->value();
-    String filename = "/data/" + board + "_" + date + ".csv";
-    String type = (board.startsWith("door")) ? "door" : "sensor";
-    String json = csvToJson(filename, type);
-    request->send(200, "application/json", json);
-  });
-
-  // وضعیت لحظه‌ای
-  server.on("/api/current", HTTP_GET, [](AsyncWebServerRequest *request){
-    StaticJsonDocument<300> doc;
-    doc["esp32_1_temp"] = localTemp;
-    doc["esp32_1_hum"] = localHum;
-    doc["esp32_s3_temp"] = s3Temp;
-    doc["esp32_s3_hum"] = s3Hum;
-    String resp;
-    serializeJson(doc, resp);
-    request->send(200, "application/json", resp);
-  });
-
-  // آمار درب (تعداد باز شدن با هر تگ)
-  server.on("/api/stats/door", HTTP_GET, [](AsyncWebServerRequest *request){
-    String date = getISODate();
-    if (request->hasParam("date")) date = request->getParam("date")->value();
-    String filename = "/data/door_" + date + ".csv";
-    File f = SD.open(filename);
-    if (!f) {
-      request->send(200, "application/json", "{\"total\":0,\"tags\":[]}");
-      return;
-    }
-    f.readStringUntil('\n'); // skip header
-    int total = 0;
-    std::map<String, int> tagCount;
-    while (f.available()) {
-      String line = f.readStringUntil('\n');
-      line.trim();
-      if (line.isEmpty()) continue;
-      int c1 = line.indexOf(',');
-      int c2 = line.indexOf(',', c1+1);
-      String tag = line.substring(c2+1);
-      tag.trim();
-      tagCount[tag]++;
-      total++;
-    }
-    f.close();
-
-    DynamicJsonDocument outDoc(4096);
-    outDoc["date"] = date;
-    outDoc["total"] = total;
-    JsonArray tagsArray = outDoc.createNestedArray("tags");
-    for (auto &pair : tagCount) {
-      JsonObject t = tagsArray.createNestedObject();
-      t["tag"] = pair.first;
-      t["count"] = pair.second;
-    }
-    String resp;
-    serializeJson(outDoc, resp);
-    request->send(200, "application/json", resp);
-  });
-
-  // دانلود فایل CSV
-  server.on("/download/sensor1", HTTP_GET, [](AsyncWebServerRequest *request){
-    String date = getISODate();
-    String path = "/data/esp32_1_" + date + ".csv";
-    request->send(SD, path, "text/csv", true);
-  });
-  server.on("/download/sensor2", HTTP_GET, [](AsyncWebServerRequest *request){
-    String date = getISODate();
-    String path = "/data/esp32_s3_" + date + ".csv";
-    request->send(SD, path, "text/csv", true);
-  });
-  server.on("/download/door", HTTP_GET, [](AsyncWebServerRequest *request){
-    String date = getISODate();
-    String path = "/data/door_" + date + ".csv";
-    request->send(SD, path, "text/csv", true);
-  });
-
-  // فرمان باز کردن درب
-  server.on("/open", HTTP_GET, [](AsyncWebServerRequest *request){
-    Serial2.println("OPEN_DOOR");
-    request->send(200, "text/plain", "Door opening...");
-  });
-
-  // سرو فایل‌های استاتیک داشبورد
-  server.serveStatic("/", SD, "/www/").setDefaultFile("index.html");
-
-  server.begin();
+  setupServer();
   Serial.println("Hub ready");
 }
 
-// ---------- حلقه اصلی ----------
-void loop() {
-  // خواندن سنسور محلی هر ۵ ثانیه
-  static unsigned long lastLocalRead = 0;
-  if (millis() - lastLocalRead >= 5000) {
-    lastLocalRead = millis();
-    float t = dht.readTemperature();
-    float h = dht.readHumidity();
-    if (!isnan(t) && !isnan(h)) {
-      localTemp = t; localHum = h;
-      updateOLED(t, h);
-      logSensorCSV("esp32_1", t, h);
-    }
-  }
-
-  // بررسی UART از آردوینو (رویدادهای درب)
-  while (Serial2.available()) {
-    String line = Serial2.readStringUntil('\n');
-    line.trim();
-    if (line.startsWith("DOOR_OPEN:")) {
-      String tag = line.substring(10);
-      logDoorEvent(tag);
-    }
-  }
-
-  // بارگذاری دوره‌ای روی گیت‌هاب
-  if (millis() - lastGitPush >= PUSH_INTERVAL) {
-    lastGitPush = millis();
-    if (githubToken.length() > 0) pushToGitHub();
-  }
+void connectWiFi() {
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) delay(500);
+  Serial.println("WiFi OK");
 }
 
-// ---------- توابع کمکی ----------
 void initSD() {
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-  if (!SD.begin(SD_CS)) {
-    Serial.println("SD Mount Failed");
-  } else {
+  if (!SD.begin(SD_CS)) Serial.println("SD Mount Failed");
+  else {
     if (!SD.exists("/data")) SD.mkdir("/data");
     if (!SD.exists("/www")) SD.mkdir("/www");
   }
@@ -258,29 +143,166 @@ void loadConfig() {
   }
 }
 
-String readFile(const char* path) {
-  File f = SD.open(path);
-  if (!f) return "";
-  String s = f.readString();
-  f.close();
-  return s;
+// ---------- دانلود خودکار فایل‌های سایت از گیت‌هاب ----------
+void downloadWebFiles() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  const char* files[] = {"index.html", "style.css", "app.js", "Chart.min.js"};
+  for (auto filename : files) {
+    HTTPClient http;
+    http.begin(String(GITHUB_RAW) + filename);
+    int code = http.GET();
+    if (code == 200) {
+      String content = http.getString();
+      String path = "/www/" + String(filename);
+      if (SD.exists(path)) SD.remove(path);
+      File f = SD.open(path, FILE_WRITE);
+      if (f) {
+        f.print(content);
+        f.close();
+        Serial.printf("Updated %s\n", filename);
+      }
+    }
+    http.end();
+    delay(200);
+  }
 }
 
-void appendCSV(const String& filename, const String& csvLine, const String& header) {
-  if (!SD.exists(filename)) {
-    File f = SD.open(filename, FILE_WRITE);
-    if (f) {
-      f.println(header);
-      f.close();
+// ---------- راه‌اندازی وب‌سرور ----------
+void setupServer() {
+  server.on("/api/sensor", HTTP_POST, [](AsyncWebServerRequest *r){
+    if (r->hasParam("plain", true)) {
+      StaticJsonDocument<200> doc;
+      deserializeJson(doc, r->getParam("plain", true)->value());
+      if (strcmp(doc["board"], "esp32_s3") == 0) {
+        s3Temp = doc["temp"]; s3Hum = doc["humidity"];
+        logSensorCSV("esp32_s3", s3Temp, s3Hum);
+      }
+    }
+    r->send(200);
+  });
+
+  server.on("/api/current", HTTP_GET, [](AsyncWebServerRequest *r){
+    DynamicJsonDocument doc(300);
+    doc["esp32_1_temp"] = localTemp;
+    doc["esp32_1_hum"] = localHum;
+    doc["esp32_s3_temp"] = s3Temp;
+    doc["esp32_s3_hum"] = s3Hum;
+    String out; serializeJson(doc, out);
+    r->send(200, "application/json", out);
+  });
+
+  // API برای داده‌های سنسور با بازه‌های مختلف
+  server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest *r){
+    String board = r->getParam("board")->value();
+    String range = r->hasParam("range") ? r->getParam("range")->value() : "daily";
+    String date = r->hasParam("date") ? r->getParam("date")->value() : getISODate();
+    String json = getDataRange(board, range, date);
+    r->send(200, "application/json", json);
+  });
+
+  // آمار درب (تعداد باز شدن با هر تگ)
+  server.on("/api/stats/door", HTTP_GET, [](AsyncWebServerRequest *r){
+    String date = r->hasParam("date") ? r->getParam("date")->value() : getISODate();
+    String filename = "/data/door_" + date + ".csv";
+    File f = SD.open(filename);
+    if (!f) { r->send(200, "application/json", "{\"total\":0,\"tags\":[]}"); return; }
+    f.readStringUntil('\n');
+    std::map<String, int> tagCount;
+    int total = 0;
+    while (f.available()) {
+      String line = f.readStringUntil('\n'); line.trim();
+      if (line.isEmpty()) continue;
+      int c2 = line.indexOf(',', line.indexOf(',')+1);
+      String tag = line.substring(c2+1); tag.trim();
+      tagCount[tag]++; total++;
+    }
+    f.close();
+    DynamicJsonDocument outDoc(4096);
+    outDoc["date"] = date;
+    outDoc["total"] = total;
+    JsonArray tags = outDoc.createNestedArray("tags");
+    for (auto &p : tagCount) { JsonObject o = tags.createNestedObject(); o["tag"] = p.first; o["count"] = p.second; }
+    String out; serializeJson(outDoc, out);
+    r->send(200, "application/json", out);
+  });
+
+  // اطلاعات SD Card
+  server.on("/api/sdinfo", HTTP_GET, [](AsyncWebServerRequest *r){
+    DynamicJsonDocument doc(256);
+    doc["total_mb"] = SD.totalBytes() / (1024*1024);
+    doc["used_mb"] = SD.usedBytes() / (1024*1024);
+    doc["free_mb"] = (SD.totalBytes() - SD.usedBytes()) / (1024*1024);
+    String out; serializeJson(doc, out);
+    r->send(200, "application/json", out);
+  });
+
+  // تاریخ شمسی + میلادی
+  server.on("/api/datetime", HTTP_GET, [](AsyncWebServerRequest *r){
+    timeClient.update();
+    time_t now = timeClient.getEpochTime();
+    struct tm *t = localtime(&now);
+    char greg[20]; sprintf(greg, "%04d-%02d-%02d %02d:%02d:%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+    JalaliDate j = gregorianToJalali(t->tm_year+1900, t->tm_mon+1, t->tm_mday);
+    char shamsi[20]; sprintf(shamsi, "%04d-%02d-%02d %02d:%02d:%02d", j.year, j.month, j.day, t->tm_hour, t->tm_min, t->tm_sec);
+
+    DynamicJsonDocument doc(128);
+    doc["gregorian"] = greg;
+    doc["shamsi"] = shamsi;
+    String out; serializeJson(doc, out);
+    r->send(200, "application/json", out);
+  });
+
+  // فرمان باز کردن درب
+  server.on("/open", HTTP_GET, [](AsyncWebServerRequest *r){
+    Serial2.println("OPEN_DOOR");
+    r->send(200);
+  });
+
+  // دانلود فایل‌های CSV
+  server.on("/download/sensor1", HTTP_GET, [](AsyncWebServerRequest *r){
+    r->send(SD, "/data/esp32_1_" + getISODate() + ".csv", "text/csv", true);
+  });
+  server.on("/download/sensor2", HTTP_GET, [](AsyncWebServerRequest *r){
+    r->send(SD, "/data/esp32_s3_" + getISODate() + ".csv", "text/csv", true);
+  });
+  server.on("/download/door", HTTP_GET, [](AsyncWebServerRequest *r){
+    r->send(SD, "/data/door_" + getISODate() + ".csv", "text/csv", true);
+  });
+
+  // سرو فایل‌های استاتیک
+  server.serveStatic("/", SD, "/www/").setDefaultFile("index.html");
+  server.begin();
+}
+
+// ---------- حلقه اصلی ----------
+void loop() {
+  static unsigned long lastLocalRead = 0;
+  if (millis() - lastLocalRead >= 5000) {
+    lastLocalRead = millis();
+    float t = dht.readTemperature();
+    float h = dht.readHumidity();
+    if (!isnan(t) && !isnan(h)) {
+      localTemp = t; localHum = h;
+      updateOLED(t, h);
+      logSensorCSV("esp32_1", t, h);
+      checkAndCleanSD();   // ← پاک‌سازی در صورت نیاز
     }
   }
-  File f = SD.open(filename, FILE_APPEND);
-  if (f) {
-    f.println(csvLine);
-    f.close();
+
+  while (Serial2.available()) {
+    String line = Serial2.readStringUntil('\n'); line.trim();
+    if (line.startsWith("DOOR_OPEN:")) {
+      logDoorEvent(line.substring(10));
+    }
+  }
+
+  if (millis() - lastGitPush >= PUSH_INTERVAL) {
+    lastGitPush = millis();
+    if (githubToken.length() > 0) pushToGitHub();
   }
 }
 
+// ---------- توابع ثبت CSV ----------
 void logSensorCSV(const String& board, float t, float h) {
   String date = getISODate();
   String filename = "/data/" + board + "_" + date + ".csv";
@@ -295,94 +317,146 @@ void logDoorEvent(String tag) {
   appendCSV(filename, line, "time,event,tag");
 }
 
-String csvToJson(const String& path, const String& type) {
-  File f = SD.open(path);
-  if (!f) return "[]";
+void appendCSV(const String& filename, const String& line, const String& header) {
+  if (!SD.exists(filename)) {
+    File f = SD.open(filename, FILE_WRITE);
+    if (f) { f.println(header); f.close(); }
+  }
+  File f = SD.open(filename, FILE_APPEND);
+  if (f) { f.println(line); f.close(); }
+}
 
-  DynamicJsonDocument doc(16384);
+// ---------- بازه‌های زمانی (hourly, daily, weekly, monthly) ----------
+String getDataRange(const String& board, const String& range, const String& refDate) {
+  // محاسبه بازهٔ تاریخ‌ها
+  std::vector<String> dates;
+  if (range == "daily") {
+    dates.push_back(refDate);
+  } else if (range == "hourly") {
+    dates.push_back(refDate);  // فقط امروز، بعداً در JS فیلتر می‌کنیم یا اینجا بر اساس ساعت
+  } else {
+    // برای سادگی، فرض می‌کنیم refDate آخرین روز بازه است
+    int y, m, d;
+    sscanf(refDate.c_str(), "%d-%d-%d", &y, &m, &d);
+    struct tm tm = {0}; tm.tm_year = y-1900; tm.tm_mon = m-1; tm.tm_mday = d;
+    time_t end = mktime(&tm);
+    int days = (range == "weekly") ? 7 : 30;
+    for (int i = 0; i < days; i++) {
+      time_t day = end - i * 86400;
+      struct tm *t = localtime(&day);
+      char buf[11]; sprintf(buf, "%04d-%02d-%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday);
+      dates.push_back(String(buf));
+    }
+    std::reverse(dates.begin(), dates.end());
+  }
+
+  DynamicJsonDocument doc(32768);
   JsonArray arr = doc.to<JsonArray>();
 
-  f.readStringUntil('\n'); // skip header
-  while (f.available()) {
-    String line = f.readStringUntil('\n');
-    line.trim();
-    if (line.isEmpty()) continue;
-
-    JsonObject obj = arr.createNestedObject();
-    if (type == "sensor") {
+  for (auto date : dates) {
+    String filename = "/data/" + board + "_" + date + ".csv";
+    if (!SD.exists(filename)) continue;
+    File f = SD.open(filename);
+    if (!f) continue;
+    f.readStringUntil('\n'); // header
+    while (f.available()) {
+      String line = f.readStringUntil('\n'); line.trim();
+      if (line.isEmpty()) continue;
+      JsonObject obj = arr.createNestedObject();
       int c1 = line.indexOf(',');
       int c2 = line.indexOf(',', c1+1);
       obj["time"] = line.substring(0, c1);
       obj["temp"] = line.substring(c1+1, c2).toFloat();
       obj["humidity"] = line.substring(c2+1).toFloat();
-    } else if (type == "door") {
-      int c1 = line.indexOf(',');
-      int c2 = line.indexOf(',', c1+1);
-      obj["time"] = line.substring(0, c1);
-      obj["event"] = line.substring(c1+1, c2);
-      obj["tag"] = line.substring(c2+1);
     }
+    f.close();
   }
-  f.close();
 
-  String json;
-  serializeJson(doc, json);
-  return json;
+  // اگر range = hourly فقط رکوردهای یک ساعت اخیر (بر اساس آخرین رکورد)
+  if (range == "hourly" && arr.size() > 0) {
+    // آخرین زمان موجود
+    String lastTime = arr[arr.size()-1]["time"]; // format "HH:MM:SS"
+    int h = lastTime.substring(0,2).toInt(), m = lastTime.substring(3,5).toInt(), s = lastTime.substring(6).toInt();
+    int cutoffSec = h*3600 + m*60 + s - 3600;
+    JsonArray filtered = doc.createNestedArray("filtered"); // موقت
+    for (JsonObject o : arr) {
+      String t = o["time"];
+      int sec = t.substring(0,2).toInt()*3600 + t.substring(3,5).toInt()*60 + t.substring(6).toInt();
+      if (sec >= cutoffSec) {
+        filtered.add(o);
+      }
+    }
+    arr = filtered;
+  }
+
+  String out; serializeJson(doc, out);
+  return out;
 }
 
-// ---------- OLED ----------
-void updateOLED(float t, float h) {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0,0);
-  display.print("Temp: "); display.print(t,1); display.print(" C");
-  display.setCursor(0,20);
-  display.print("Hum : "); display.print(h,1); display.print(" %");
-  display.setCursor(0,40);
-  display.print(WiFi.localIP());
-  display.display();
+// ---------- پاک‌سازی خودکار SD ----------
+void checkAndCleanSD() {
+  unsigned long freeKB = (SD.totalBytes() - SD.usedBytes()) / 1024;
+  if (freeKB > 1024) return; // اگر بیش از ۱ مگابایت آزاد است، کاری نکن
+
+  File root = SD.open("/data");
+  if (!root || !root.isDirectory()) return;
+
+  std::vector<String> files;
+  while (File f = root.openNextFile()) {
+    if (!f.isDirectory() && String(f.name()).endsWith(".csv")) {
+      files.push_back(f.name());
+    }
+    f.close();
+  }
+  root.close();
+
+  // مرتب‌سازی بر اساس تاریخ (از قدیم به جدید)
+  std::sort(files.begin(), files.end(), [](String a, String b) {
+    // استخراج تاریخ از نام فایل مثلاً esp32_1_2026-08-01.csv
+    String dateA = a.substring(a.lastIndexOf('_')+1);
+    dateA = dateA.substring(0,10);
+    String dateB = b.substring(b.lastIndexOf('_')+1);
+    dateB = dateB.substring(0,10);
+    return dateA < dateB;
+  });
+
+  // حذف قدیمی‌ترین فایل‌ها تا آزاد شدن حداقل ۲ مگابایت
+  for (auto fname : files) {
+    if ((SD.totalBytes() - SD.usedBytes()) / 1024 > 2048) break;
+    // فایل امروز را حذف نکن
+    if (fname.indexOf(getISODate()) != -1) continue;
+    SD.remove("/data/" + fname);
+    Serial.printf("Deleted old file: %s\n", fname.c_str());
+  }
 }
 
-// ---------- زمان ----------
-String getISODate() {
-  timeClient.update();
-  time_t epoch = timeClient.getEpochTime();
-  struct tm *t = localtime(&epoch);
-  char buf[11];
-  sprintf(buf, "%04d-%02d-%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday);
-  return String(buf);
-}
-
-String getTimeStr() {
-  timeClient.update();
-  time_t epoch = timeClient.getEpochTime();
-  struct tm *t = localtime(&epoch);
-  char buf[9];
-  sprintf(buf, "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
-  return String(buf);
-}
-
-// ---------- گیت‌هاب ----------
+// ---------- توابع گیت‌هاب ----------
 void pushToGitHub() {
   String date = getISODate();
   String boards[] = {"esp32_1", "esp32_s3", "door"};
-  for (String board : boards) {
-    String filename = "/data/" + board + "_" + date + ".csv";
-    if (!SD.exists(filename)) continue;
-    String content = readFile(filename.c_str());
-    if (content.length() == 0) continue;
+  for (auto board : boards) {
     String path = "data/" + board + "_" + date + ".csv";
+    String local = "/data/" + board + "_" + date + ".csv";
+    if (!SD.exists(local)) continue;
+    String content = readFile(local.c_str());
+    if (content.isEmpty()) continue;
     String sha = getGitSHA(path);
     addGitHubFile(path, content, sha);
-    delay(1000);  // جلوگیری از rate limit
+    delay(1000);
   }
-  Serial.println("GitHub push completed");
+  // پوش فایل sdinfo.json
+  DynamicJsonDocument sdoc(256);
+  sdoc["total_mb"] = SD.totalBytes()/(1024*1024);
+  sdoc["used_mb"] = SD.usedBytes()/(1024*1024);
+  sdoc["free_mb"] = (SD.totalBytes() - SD.usedBytes())/(1024*1024);
+  String sdjson; serializeJson(sdoc, sdjson);
+  String sha = getGitSHA("sdinfo.json");
+  addGitHubFile("sdinfo.json", sdjson, sha);
 }
 
 String getGitSHA(const String& path) {
   HTTPClient http;
-  String url = "https://api.github.com/repos/" + githubUser + "/" + githubRepo + "/contents/" + path + "?ref=" + githubBranch;
-  http.begin(url);
+  http.begin("https://api.github.com/repos/" + githubUser + "/" + githubRepo + "/contents/" + path + "?ref=" + githubBranch);
   http.addHeader("Authorization", "token " + githubToken);
   http.addHeader("User-Agent", "ESP32-Hub");
   int code = http.GET();
@@ -405,22 +479,52 @@ void addGitHubFile(const String& path, const String& content, const String& sha)
   b64.replace("\n", "");
 
   HTTPClient http;
-  String url = "https://api.github.com/repos/" + githubUser + "/" + githubRepo + "/contents/" + path;
-  http.begin(url);
+  http.begin("https://api.github.com/repos/" + githubUser + "/" + githubRepo + "/contents/" + path);
   http.addHeader("Authorization", "token " + githubToken);
   http.addHeader("User-Agent", "ESP32-Hub");
   http.addHeader("Content-Type", "application/json");
 
-  StaticJsonDocument<1024> doc;
+  DynamicJsonDocument doc(1024);
   doc["message"] = "auto update";
   doc["content"] = b64;
   doc["branch"] = githubBranch;
   if (sha.length() > 0) doc["sha"] = sha;
-  String body;
-  serializeJson(doc, body);
-
-  int code = http.PUT(body);
-  Serial.printf("GitHub PUT %s -> %d\n", path.c_str(), code);
-  if (code >= 400) Serial.println(http.getString());
+  String body; serializeJson(doc, body);
+  http.PUT(body);
   http.end();
+}
+
+// ---------- کمکی‌ها ----------
+String readFile(const char* path) {
+  File f = SD.open(path);
+  if (!f) return "";
+  String s = f.readString();
+  f.close();
+  return s;
+}
+
+void updateOLED(float t, float h) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0,0);
+  display.printf("T:%.1fC H:%.1f%%", t, h);
+  display.setCursor(0,15);
+  display.print(WiFi.localIP());
+  display.display();
+}
+
+String getISODate() {
+  timeClient.update();
+  time_t now = timeClient.getEpochTime();
+  struct tm *t = localtime(&now);
+  char buf[11]; sprintf(buf, "%04d-%02d-%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday);
+  return String(buf);
+}
+
+String getTimeStr() {
+  timeClient.update();
+  time_t now = timeClient.getEpochTime();
+  struct tm *t = localtime(&now);
+  char buf[9]; sprintf(buf, "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+  return String(buf);
 }
