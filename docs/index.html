@@ -3,26 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>خانه هوشمند – پنل سایبری</title>
+  <title>خانه هوشمند | پنل سایبری</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- پس‌زمینهٔ کهکشان -->
-  <div class="galaxy-bg"></div>
+  <!-- شبکهٔ سایبری پس‌زمینه -->
+  <div class="cyber-grid"></div>
+  <div class="scanline"></div>
 
-  <div class="cyber-container">
+  <div class="container">
     <header>
       <h1 class="glitch" data-text="پنل مانیتورینگ سایبری">پنل مانیتورینگ سایبری</h1>
       <div class="datetime" id="datetime">...</div>
     </header>
 
     <!-- پنل وضعیت نودها -->
-    <div class="status-panel glass-card">
-      <h2>وضعیت نودها</h2>
+    <div class="node-panel glass">
+      <h2 class="section-title">وضعیت نودها</h2>
       <div class="node-grid">
         <div class="node" id="node-hub">
           <span class="node-icon">🖥️</span>
-          <span class="node-name">هاب (ESP32)</span>
+          <span class="node-name">هاب ESP32</span>
           <span class="node-status" id="status-hub">●</span>
           <span class="node-time" id="time-hub"></span>
         </div>
@@ -41,43 +42,42 @@
       </div>
     </div>
 
-    <!-- کارت‌های لحظه‌ای -->
-    <div class="cards-row">
-      <div class="glass-card sensor-card">
+    <!-- کارت‌های خلاصه -->
+    <div class="summary-cards">
+      <div class="glass card">
         <div class="card-icon">🌡️</div>
-        <div class="card-content">
+        <div class="card-info">
           <h3>اتاق ۱ (ESP32)</h3>
-          <p><span id="s1-temp">--</span>°C | رطوبت: <span id="s1-hum">--</span>%</p>
+          <p><span id="s1-temp">--</span>°C | <span id="s1-hum">--</span>%</p>
         </div>
       </div>
-      <div class="glass-card sensor-card">
+      <div class="glass card">
         <div class="card-icon">🌡️</div>
-        <div class="card-content">
+        <div class="card-info">
           <h3>اتاق ۲ (S3)</h3>
-          <p><span id="s2-temp">--</span>°C | رطوبت: <span id="s2-hum">--</span>%</p>
+          <p><span id="s2-temp">--</span>°C | <span id="s2-hum">--</span>%</p>
         </div>
       </div>
-      <div class="glass-card door-card">
+      <div class="glass card">
         <div class="card-icon">🚪</div>
-        <div class="card-content">
-          <h3>باز شدن درب امروز</h3>
+        <div class="card-info">
+          <h3>درب امروز</h3>
           <p><span id="door-total">0</span> بار</p>
         </div>
       </div>
-      <div class="glass-card sd-card">
+      <div class="glass card">
         <div class="card-icon">💾</div>
-        <div class="card-content">
-          <h3>حافظهٔ SD</h3>
-          <p>آزاد: <span id="sd-free">--</span>MB / <span id="sd-total">--</span>MB</p>
+        <div class="card-info">
+          <h3>حافظه SD</h3>
+          <p><span id="sd-free">--</span>MB آزاد</p>
         </div>
       </div>
     </div>
 
-    <!-- گرید نمودارها -->
+    <!-- نمودارها -->
     <div class="charts-grid">
-      <!-- سنسور ۱ -->
-      <div class="chart-box glass-card">
-        <div class="chart-header">
+      <div class="glass chart-box">
+        <div class="chart-toolbar">
           <h3>نمودار اتاق ۱</h3>
           <select class="range-select" data-board="esp32_1">
             <option value="hourly">ساعتی</option>
@@ -89,10 +89,8 @@
         </div>
         <canvas id="chart1"></canvas>
       </div>
-
-      <!-- سنسور ۲ -->
-      <div class="chart-box glass-card">
-        <div class="chart-header">
+      <div class="glass chart-box">
+        <div class="chart-toolbar">
           <h3>نمودار اتاق ۲</h3>
           <select class="range-select" data-board="esp32_s3">
             <option value="hourly">ساعتی</option>
@@ -104,33 +102,25 @@
         </div>
         <canvas id="chart2"></canvas>
       </div>
-
-      <!-- درب -->
-      <div class="chart-box glass-card">
-        <div class="chart-header">
-          <h3>آمار درب</h3>
+      <div class="glass chart-box">
+        <div class="chart-toolbar">
+          <h3>آمار بازشدن درب</h3>
           <input type="date" id="door-date-picker">
         </div>
         <canvas id="chart3"></canvas>
-        <div class="door-table-wrapper">
-          <table>
-            <thead><tr><th>تگ</th><th>تعداد</th></tr></thead>
-            <tbody id="door-table-body"></tbody>
-          </table>
-        </div>
+        <table id="door-table">
+          <thead><tr><th>تگ</th><th>دفعات</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
-
-      <!-- SD -->
-      <div class="chart-box glass-card">
-        <div class="chart-header">
-          <h3>وضعیت حافظه</h3>
-        </div>
+      <div class="glass chart-box">
+        <div class="chart-toolbar"><h3>وضعیت SD</h3></div>
         <canvas id="chart4"></canvas>
       </div>
     </div>
 
     <footer>
-      <p>داده‌ها هر ۳۰ دقیقه به‌روزرسانی می‌شوند | SmartHome-Hybrid-IoT</p>
+      <p>SmartHome-Hybrid-IoT | داده‌ها هر ۳۰ دقیقه به‌روز می‌شوند</p>
     </footer>
   </div>
 
