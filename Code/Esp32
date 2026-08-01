@@ -1,20 +1,12 @@
 /*
- * SmartHome-Hybrid-IoT - ESP32 Hub (نسخه نهایی با پین‌های جدید)
- * آی‌پی: 192.168.1.119
+ * SmartHome-Hybrid-IoT - ESP32 Hub (سلف‌تست کامل)
+ * آی‌پی: 192.168.1.119 (ثابت)
  * 
  * پین‌ها:
  *  I2C OLED 128x64: SDA=5, SCL=4
  *  DHT22: 13
  *  SD: CS=15, MOSI=12, MISO=14, SCK=2
  *  UART به آردوینو: RX2=16, TX2=17
- * 
- * امکانات:
- *  - ذخیره‌سازی CSV روزانه (سنسورها + درب)
- *  - APIهای JSON برای داشبورد
- *  - دانلود خودکار سایت داخلی از گیت‌هاب
- *  - پاک‌سازی خودکار SD
- *  - بارگذاری CSVها و وضعیت نودها روی گیت‌هاب هر ۳۰ دقیقه
- *  - تاریخ شمسی و میلادی
  */
 
 #include <WiFi.h>
@@ -37,6 +29,11 @@
 const char* ssid     = ">><<>><<";
 const char* password = "MEHRdAd1380";
 
+// IP ثابت
+IPAddress localIP(192, 168, 1, 119);
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 255, 0);
+
 // ---------- گیت‌هاب ----------
 String githubUser   = "mehrdadmb2";             // ← جایگزین کن
 String githubRepo   = "SmartHome-Hybrid-IoT";   // ← جایگزین کن
@@ -44,7 +41,7 @@ String githubBranch = "main";
 String githubToken  = "";                       // از /config.txt خوانده می‌شود
 const char* GITHUB_RAW = "https://raw.githubusercontent.com/mehrdadmb2/SmartHome-Hybrid-IoT/main/site/";
 
-// ---------- پین‌ها (طبق سیم‌کشی جدید) ----------
+// ---------- پین‌ها ----------
 #define I2C_SDA   5
 #define I2C_SCL   4
 #define DHTPIN    13
@@ -71,7 +68,7 @@ AsyncWebServer server(80);
 float localTemp = 0, localHum = 0;
 float s3Temp = 0, s3Hum = 0;
 
-// وضعیت نودها – زمان آخرین دریافت داده (میلی‌ثانیه از start)
+// وضعیت نودها
 unsigned long lastS3Data = 0;
 unsigned long lastDoorEvent = 0;
 const unsigned long NODE_TIMEOUT = 600; // ۱۰ دقیقه
@@ -94,62 +91,133 @@ JalaliDate gregorianToJalali(int gy, int gm, int gd) {
   return {jy, jm, jd};
 }
 
-// ---------- راه‌اندازی ----------
-void setup() {
-  Serial.begin(115200);
-  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+// ---------- سلف‌تست ----------
+void selfTest() {
+  Serial.println("\n========== SELF TEST START ==========");
+  
+  // 1. I2C و OLED
+  Serial.print("[1/5] OLED init... ");
   Wire.begin(I2C_SDA, I2C_SCL);
-
-  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
-    Serial.println("OLED fail");
-  }
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("Booting...");
-  display.display();
-
-  initSD();
-  loadConfig();
-  connectWiFi();
-  downloadWebFiles();   // دانلود فایل‌های سایت از گیت‌هاب
-
-  timeClient.begin();
-  dht.begin();
-  setupServer();
-  Serial.println("Hub ready");
-}
-
-void connectWiFi() {
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) delay(500);
-  Serial.println("WiFi OK");
-}
-
-// ---------- SD ----------
-void initSD() {
-  SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-  if (!SD.begin(SD_CS)) {
-    Serial.println("SD Mount Failed");
+  if (display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println("OK (0x3C)");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,0);
+    display.println("System Boot");
+    display.display();
+    delay(1000);
   } else {
+    Serial.println("FAILED");
+  }
+
+  // 2. SD Card
+  Serial.print("[2/5] SD Card init... ");
+  SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
+  delay(100);
+  if (SD.begin(SD_CS)) {
+    Serial.println("OK");
     if (!SD.exists("/data")) SD.mkdir("/data");
     if (!SD.exists("/www")) SD.mkdir("/www");
-    Serial.println("SD OK");
-  }
-}
-
-void loadConfig() {
-  File f = SD.open("/config.txt");
-  if (f) {
-    while (f.available()) {
+    // خواندن توکن
+    File f = SD.open("/config.txt");
+    if (f) {
       String line = f.readStringUntil('\n');
       line.trim();
       if (line.startsWith("token ")) {
         githubToken = line.substring(6);
         githubToken.trim();
+        Serial.println("   GitHub token loaded.");
       }
+      f.close();
+    } else {
+      Serial.println("   config.txt not found.");
     }
-    f.close();
+  } else {
+    Serial.println("FAILED");
   }
+
+  // 3. WiFi
+  Serial.print("[3/5] WiFi connect... ");
+  WiFi.config(localIP, gateway, subnet);
+  WiFi.begin(ssid, password);
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println(" OK");
+    Serial.print("    IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println(" FAILED");
+  }
+
+  // 4. NTP
+  Serial.print("[4/5] NTP sync... ");
+  timeClient.begin();
+  if (timeClient.update()) {
+    Serial.println("OK");
+    Serial.print("    Time: ");
+    Serial.println(getTimeStr());
+  } else {
+    Serial.println("FAILED");
+  }
+
+  // 5. DHT22
+  Serial.print("[5/5] DHT22 test read... ");
+  dht.begin();
+  delay(2000);
+  float t = dht.readTemperature();
+  float h = dht.readHumidity();
+  if (!isnan(t) && !isnan(h)) {
+    Serial.printf("OK (%.1f°C, %.1f%%)\n", t, h);
+    localTemp = t;
+    localHum = h;
+    updateOLED(t, h);  // نمایش روی OLED
+  } else {
+    Serial.println("FAILED (check wiring)");
+  }
+
+  Serial.println("========== SELF TEST COMPLETE ==========\n");
+}
+
+// ---------- راه‌اندازی ----------
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("\nSmartHome Hub starting...");
+  
+  // I2C و OLED اولیه (برای سلف‌تست)
+  Wire.begin(I2C_SDA, I2C_SCL);
+  display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  display.clearDisplay();
+  display.display();
+  
+  // انجام تست‌ها
+  selfTest();
+
+  // ادامه راه‌اندازی
+  if (WiFi.status() == WL_CONNECTED) {
+    downloadWebFiles();   // دانلود فایل‌های سایت از گیت‌هاب
+  }
+  setupServer();
+  Serial.println("Hub ready. Web server started.");
+}
+
+void connectWiFi() {
+  // خالی؛ در سلف‌تست انجام شده
+}
+
+// ---------- SD ----------
+void initSD() {
+  // در سلف‌تست انجام شده
+}
+
+void loadConfig() {
+  // در سلف‌تست انجام شده
 }
 
 // ---------- دانلود فایل‌های وب‌سایت ----------
@@ -178,7 +246,6 @@ void downloadWebFiles() {
 
 // ---------- وب‌سرور ----------
 void setupServer() {
-  // دریافت از S3
   server.on("/api/sensor", HTTP_POST, [](AsyncWebServerRequest *request){
     if (request->hasParam("plain", true)) {
       StaticJsonDocument<200> doc;
@@ -192,7 +259,6 @@ void setupServer() {
     request->send(200);
   });
 
-  // وضعیت لحظه‌ای
   server.on("/api/current", HTTP_GET, [](AsyncWebServerRequest *request){
     DynamicJsonDocument doc(300);
     doc["esp32_1_temp"] = localTemp;
@@ -203,7 +269,6 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
-  // داده‌های سنسور با بازه
   server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest *request){
     String board = request->getParam("board")->value();
     String range = request->hasParam("range") ? request->getParam("range")->value() : "daily";
@@ -212,7 +277,6 @@ void setupServer() {
     request->send(200, "application/json", json);
   });
 
-  // آمار درب
   server.on("/api/stats/door", HTTP_GET, [](AsyncWebServerRequest *request){
     String date = request->hasParam("date") ? request->getParam("date")->value() : getISODate();
     String filename = "/data/door_" + date + ".csv";
@@ -244,7 +308,6 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
-  // SD info
   server.on("/api/sdinfo", HTTP_GET, [](AsyncWebServerRequest *request){
     DynamicJsonDocument doc(256);
     doc["total_mb"] = SD.totalBytes() / (1024*1024);
@@ -254,7 +317,6 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
-  // تاریخ شمسی + میلادی
   server.on("/api/datetime", HTTP_GET, [](AsyncWebServerRequest *request){
     timeClient.update();
     time_t now = timeClient.getEpochTime();
@@ -269,13 +331,11 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
-  // باز کردن درب
   server.on("/open", HTTP_GET, [](AsyncWebServerRequest *request){
     Serial2.println("OPEN_DOOR");
     request->send(200, "text/plain", "OK");
   });
 
-  // دانلود CSV
   server.on("/download/sensor1", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SD, "/data/esp32_1_" + getISODate() + ".csv", "text/csv", true);
   });
@@ -286,9 +346,9 @@ void setupServer() {
     request->send(SD, "/data/door_" + getISODate() + ".csv", "text/csv", true);
   });
 
-  // سرو فایل‌های استاتیک
   server.serveStatic("/", SD, "/www/").setDefaultFile("index.html");
   server.begin();
+  Serial.println("Web server started");
 }
 
 // ---------- حلقه اصلی ----------
@@ -317,7 +377,9 @@ void loop() {
 
   if (millis() - lastGitPush >= PUSH_INTERVAL) {
     lastGitPush = millis();
-    if (githubToken.length() > 0) pushToGitHub();
+    if (githubToken.length() > 0 && WiFi.status() == WL_CONNECTED) {
+      pushToGitHub();
+    }
   }
 }
 
@@ -456,7 +518,6 @@ void pushToGitHub() {
     delay(1000);
   }
 
-  // sdinfo.json
   DynamicJsonDocument sdoc(256);
   sdoc["total_mb"] = SD.totalBytes()/(1024*1024);
   sdoc["used_mb"] = SD.usedBytes()/(1024*1024);
@@ -465,7 +526,6 @@ void pushToGitHub() {
   String sha = getGitSHA("sdinfo.json");
   addGitHubFile("sdinfo.json", sdjson, sha);
 
-  // node_status.json
   unsigned long now = millis();
   bool s3online = (now - lastS3Data < NODE_TIMEOUT * 1000);
   bool dooronline = (now - lastDoorEvent < NODE_TIMEOUT * 1000);
@@ -547,7 +607,7 @@ void updateOLED(float t, float h) {
   display.setTextSize(1);
   display.setCursor(0,0);
   display.printf("T:%.1fC H:%.1f%%", t, h);
-  display.setCursor(0,15);
+  display.setCursor(0,20);
   display.print(WiFi.localIP());
   display.display();
 }
