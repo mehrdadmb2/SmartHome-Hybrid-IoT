@@ -1,193 +1,28 @@
 * { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: Tahoma, sans-serif; background: #0a0a0f; color: #0ff; padding: 1rem; }
+.container { max-width: 1000px; margin: auto; }
+header { text-align: center; margin-bottom: 1.5rem; }
+h1 { color: #f0f; text-shadow: 0 0 10px #f0f; }
+#datetime { color: #0ff; margin-top: 0.5rem; font-size: 1.1rem; }
 
-body {
-  font-family: 'Courier New', monospace;
-  background: #0a0a0f;
-  color: #00ffff;
-  overflow-x: hidden;
-  position: relative;
-  min-height: 100vh;
-}
+.node-panel { margin-bottom: 1.5rem; }
+.node-panel h2 { color: #f0f; margin-bottom: 0.5rem; }
+.node-grid { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+.node { background: rgba(0,0,0,0.5); border: 1px solid #0ff; padding: 0.5rem 1rem; border-radius: 0.5rem; }
+.node-status { font-size: 1.2rem; margin-left: 0.5rem; }
 
-/* پس‌زمینهٔ سایبری: شبکه + اسکن لاین */
-.cyber-grid {
-  position: fixed;
-  top:0; left:0; width:100%; height:100%;
-  background-image: 
-    linear-gradient(rgba(0,255,255,0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,255,255,0.1) 1px, transparent 1px);
-  background-size: 40px 40px;
-  z-index: -1;
-  animation: gridMove 20s linear infinite;
-}
-@keyframes gridMove {
-  from { transform: translate(0,0); }
-  to { transform: translate(40px,40px); }
-}
+.cards { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-bottom: 1.5rem; }
+.card { background: rgba(10,15,25,0.7); border: 1px solid #0ff; border-radius: 0.8rem; padding: 1rem; min-width: 160px; text-align: center; }
+.card h3 { color: #f0f; }
+button { background: #f0f; color: #000; border: none; padding: 0.4rem 0.8rem; border-radius: 0.4rem; cursor: pointer; margin-top: 0.5rem; }
 
-.scanline {
-  position: fixed;
-  top:0; left:0; width:100%; height:100%;
-  background: linear-gradient(to bottom, transparent 0%, rgba(0,255,255,0.02) 50%, transparent 100%);
-  animation: scan 8s linear infinite;
-  z-index: -1;
-  pointer-events: none;
-}
-@keyframes scan { 0%{top:-100%;} 100%{top:100%;} }
-
-.container {
-  width: 95%;
-  max-width: 1400px;
-  margin: 2rem auto;
-  padding: 1rem;
-}
-
-/* هدر */
-header { text-align:center; margin-bottom:2rem; }
-h1 {
-  font-size: clamp(1.8rem, 5vw, 2.5rem);
-  color: #ff00ff;
-  text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 40px #ff00ff;
-  animation: glitchText 3s infinite;
-}
-.glitch::after {
-  content: attr(data-text);
-  position: absolute;
-  left: 2px;
-  text-shadow: -2px 0 cyan;
-  clip: rect(0, 900px, 0, 0);
-  animation: glitchClip 2s infinite linear alternate-reverse;
-}
-@keyframes glitchText {
-  0% { text-shadow: 0 0 10px #ff00ff; }
-  25% { text-shadow: -2px 0 red, 2px 0 cyan; }
-  50% { text-shadow: 0 0 20px #00ffff; }
-  75% { text-shadow: 0 0 10px #ff00ff; }
-}
-@keyframes glitchClip {
-  0% { clip: rect(10px, 9999px, 30px, 0); }
-  20% { clip: rect(20px, 9999px, 50px, 0); }
-  40% { clip: rect(5px, 9999px, 40px, 0); }
-  60% { clip: rect(15px, 9999px, 60px, 0); }
-  80% { clip: rect(0, 9999px, 25px, 0); }
-  100% { clip: rect(10px, 9999px, 45px, 0); }
-}
-
-.datetime {
-  font-size: 1.2rem;
-  color: #00ffff;
-  text-shadow: 0 0 5px cyan;
-  margin-top: 0.5rem;
-}
-
-/* المان‌های شیشه‌ای */
-.glass {
-  background: rgba(10, 15, 25, 0.6);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  border: 1px solid rgba(0, 255, 255, 0.3);
-  border-radius: 1rem;
-  padding: 1rem;
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
-  transition: border-color 0.3s, box-shadow 0.3s;
-}
-.glass:hover {
-  border-color: rgba(255, 0, 255, 0.6);
-  box-shadow: 0 0 30px rgba(255, 0, 255, 0.3);
-}
-
-.section-title {
-  color: #ff00ff;
-  margin-bottom: 0.5rem;
-}
-
-/* پنل وضعیت نودها */
-.node-panel { margin-bottom: 2rem; }
-.node-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: center;
-}
-.node {
-  background: rgba(0,0,0,0.5);
-  border: 1px solid rgba(0,255,255,0.4);
-  border-radius: 0.5rem;
-  padding: 0.8rem 1.2rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex: 1 1 250px;
-}
-.node-icon { font-size: 1.5rem; }
-.node-name { color: #ccc; min-width: 90px; }
-.node-status { font-size: 1.5rem; }
-.node-time { font-size: 0.8rem; color: #aaa; margin-right: auto; }
-
-/* کارت‌های خلاصه */
-.summary-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: center;
-  margin-bottom: 2rem;
-}
-.card {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex: 1 1 200px;
-  min-width: 160px;
-}
-.card-icon { font-size: 2rem; }
-.card-info h3 { font-size: 0.9rem; color: #ff00ff; }
-.card-info p { font-size: 1.1rem; }
-
-/* نمودارها */
-.charts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
+.charts { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-bottom: 1.5rem; }
+.chart-box { background: rgba(10,15,25,0.7); border: 1px solid #0ff; border-radius: 0.8rem; padding: 1rem; flex: 1 1 45%; min-width: 300px; }
 .chart-box canvas { max-height: 250px; }
-.chart-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-.chart-toolbar h3 { color: #ff00ff; margin-left: auto; }
-.range-select, .date-picker {
-  background: #000;
-  border: 1px solid #00ffff;
-  color: #00ffff;
-  padding: 0.3rem 0.5rem;
-  border-radius: 0.3rem;
-  font-family: inherit;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-}
-th, td {
-  border: 1px solid rgba(0,255,255,0.2);
-  padding: 0.3rem;
-  text-align: center;
-}
-th { background: rgba(0,0,0,0.4); color: #ff00ff; }
+select { background: #000; color: #0ff; border: 1px solid #0ff; padding: 0.3rem; border-radius: 0.3rem; margin-bottom: 0.5rem; }
 
-footer {
-  text-align: center;
-  color: #555;
-  font-size: 0.9rem;
-}
-
-/* ریسپانسیو */
-@media (max-width: 768px) {
-  .charts-grid { grid-template-columns: 1fr; }
-  .node-grid { flex-direction: column; }
-}
+.door-stats { background: rgba(10,15,25,0.7); border: 1px solid #0ff; border-radius: 0.8rem; padding: 1rem; }
+.door-stats h3 { color: #f0f; margin-bottom: 0.5rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid rgba(0,255,255,0.2); padding: 0.3rem; text-align: center; }
+th { background: rgba(0,0,0,0.4); color: #f0f; }
