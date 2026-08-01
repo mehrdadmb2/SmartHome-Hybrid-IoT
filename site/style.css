@@ -66,6 +66,7 @@ body {
   padding: 1.2rem;
   box-shadow: 0 8px 32px rgba(0,0,0,0.3);
   transition: all 0.4s;
+  margin-bottom: 1.5rem;
 }
 .glass:hover {
   border-color: var(--neon-cyan);
@@ -73,20 +74,24 @@ body {
 }
 .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
 
-header { text-align: center; margin-bottom: 2rem; position: relative; }
+header { text-align: center; margin-bottom: 2rem; }
 .neon-text {
   font-size: 2.5rem;
   color: var(--neon-pink);
   text-shadow: 0 0 10px var(--neon-pink), 0 0 30px var(--neon-pink);
 }
 .datetime { font-size: 1.2rem; color: var(--neon-cyan); margin: 0.5rem 0; }
-.controls { margin-top: 1rem; display: flex; justify-content: center; gap: 1rem; }
+.controls { margin-top: 1rem; display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
 .glass-btn {
   background: transparent; border: 1px solid var(--border); color: var(--text);
   padding: 0.5rem 1rem; border-radius: 2rem; cursor: pointer; backdrop-filter: blur(10px);
-  transition: all 0.3s;
+  transition: all 0.3s; font-size: 0.9rem;
 }
 .glass-btn:hover { border-color: var(--neon-cyan); box-shadow: 0 0 15px var(--neon-cyan); }
+.glass-input {
+  background: rgba(0,0,0,0.4); border: 1px solid var(--border); color: var(--text);
+  padding: 0.5rem 1rem; border-radius: 2rem; outline: none; width: 150px;
+}
 
 .node-status-bar {
   display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap;
@@ -134,3 +139,24 @@ header { text-align: center; margin-bottom: 2rem; position: relative; }
 table { width: 100%; border-collapse: collapse; }
 th, td { border: 1px solid var(--border); padding: 0.6rem; text-align: center; }
 th { background: rgba(0,0,0,0.3); }
+
+/* ===== File Manager ===== */
+.file-manager { padding: 1.5rem; }
+.file-manager h2 { color: var(--neon-cyan); margin-bottom: 1rem; }
+.file-toolbar {
+  display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem;
+}
+#file-table {
+  width: 100%; border-collapse: collapse;
+}
+#file-table th { background: rgba(0,0,0,0.4); color: var(--neon-pink); }
+#file-table td { padding: 0.5rem; }
+.upload-status {
+  margin: 0.5rem 0; font-size: 0.9rem; color: var(--neon-cyan);
+}
+.file-action-btn {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  padding: 0.2rem 0.6rem; border-radius: 0.5rem; cursor: pointer; margin: 0 0.2rem;
+  font-size: 0.8rem; transition: all 0.2s;
+}
+.file-action-btn:hover { border-color: var(--neon-cyan); }
