@@ -7,19 +7,10 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- پس‌زمینه ستاره‌ای -->
   <div class="stars"></div>
-  <!-- شفق قطبی -->
   <div class="aurora"></div>
-  <!-- المان‌های شناور -->
-  <div class="floating-icons">
-    <span class="float-icon" style="top:10%;left:5%;"><i class="fas fa-microchip"></i></span>
-    <span class="float-icon" style="top:80%;left:90%;"><i class="fas fa-network-wired"></i></span>
-    <span class="float-icon" style="top:40%;left:95%;"><i class="fas fa-temperature-high"></i></span>
-  </div>
-
-  <div class="container">
-    <header class="glass">
+  <div class="container glass">
+    <header>
       <h1 class="neon-text" data-lang="title">🏠 خانه هوشمند</h1>
       <div class="datetime" id="datetime">--</div>
       <div class="controls">
@@ -28,43 +19,40 @@
       </div>
     </header>
 
-    <!-- نوار وضعیت نودها -->
     <div class="node-status-bar glass">
-      <div class="node" id="node-hub"><span>🖥️ هاب</span><span class="status-dot"></span></div>
-      <div class="node" id="node-s3"><span>🌡️ سنسور S3</span><span class="status-dot"></span></div>
-      <div class="node" id="node-door"><span>🚪 دربازکن</span><span class="status-dot"></span></div>
+      <div class="node"><span>🖥️ هاب</span><span class="status-dot" id="hub-status"></span></div>
+      <div class="node"><span>🌡️ سنسور S3</span><span class="status-dot" id="s3-status"></span></div>
+      <div class="node"><span>🚪 دربازکن</span><span class="status-dot" id="door-status"></span></div>
     </div>
 
-    <!-- کارت‌های داده‌های زنده -->
     <div class="cards-row">
       <div class="glass card">
-        <i class="fas fa-thermometer-half card-icon"></i>
-        <h3 data-lang="room1">اتاق ۱</h3>
-        <p>🌡️ <span id="t1">--</span>°C | 💧 <span id="h1">--</span>%</p>
+        <div class="card-icon">🌡️</div>
+        <h3>اتاق ۱</h3>
+        <p>دما: <span id="t1">--</span>°C | رطوبت: <span id="h1">--</span>%</p>
       </div>
       <div class="glass card">
-        <i class="fas fa-thermometer-half card-icon"></i>
-        <h3 data-lang="room2">اتاق ۲ (S3)</h3>
-        <p>🌡️ <span id="t2">--</span>°C | 💧 <span id="h2">--</span>%</p>
+        <div class="card-icon">🌡️</div>
+        <h3>اتاق ۲ (S3)</h3>
+        <p>دما: <span id="t2">--</span>°C | رطوبت: <span id="h2">--</span>%</p>
       </div>
       <div class="glass card">
-        <i class="fas fa-door-open card-icon"></i>
-        <h3 data-lang="door">درب</h3>
-        <p data-lang="doorOpen">امروز: <span id="door-total">0</span> بار</p>
-        <button id="open-door" class="btn neon-btn" data-lang="openDoor">باز کردن درب</button>
+        <div class="card-icon">🚪</div>
+        <h3>درب</h3>
+        <p>امروز: <span id="door-total">0</span> بار</p>
+        <button id="open-door" class="neon-btn">باز کردن درب</button>
       </div>
       <div class="glass card">
-        <i class="fas fa-sd-card card-icon"></i>
-        <h3 data-lang="sd">حافظه SD</h3>
+        <div class="card-icon">💾</div>
+        <h3>حافظه SD</h3>
         <p>آزاد: <span id="sd-free">--</span>MB / <span id="sd-total">--</span>MB</p>
       </div>
     </div>
 
-    <!-- نمودارها -->
     <div class="charts-grid">
       <div class="glass chart-card">
         <div class="chart-header">
-          <h3 data-lang="chart1">نمودار اتاق ۱</h3>
+          <h3>نمودار اتاق ۱</h3>
           <select class="range-select" data-board="esp32_1">
             <option value="hourly">ساعتی</option>
             <option value="daily" selected>روزانه</option>
@@ -76,7 +64,7 @@
       </div>
       <div class="glass chart-card">
         <div class="chart-header">
-          <h3 data-lang="chart2">نمودار اتاق ۲</h3>
+          <h3>نمودار اتاق ۲</h3>
           <select class="range-select" data-board="esp32_s3">
             <option value="hourly">ساعتی</option>
             <option value="daily" selected>روزانه</option>
@@ -88,9 +76,8 @@
       </div>
     </div>
 
-    <!-- جدول تگ‌های درب -->
     <div class="glass table-card">
-      <h3 data-lang="doorTags">تگ‌های امروز</h3>
+      <h3>تگ‌های امروز</h3>
       <table id="door-tags-table">
         <thead><tr><th>تگ</th><th>دفعات</th></tr></thead>
         <tbody></tbody>
