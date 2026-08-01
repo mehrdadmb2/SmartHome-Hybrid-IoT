@@ -1,63 +1,99 @@
 <!DOCTYPE html>
-<html lang="fa">
+<html lang="fa" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>خانه هوشمند - داخلی</title>
+  <title>خانه هوشمند | محلی</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>🏠 داشبورد خانه هوشمند</h1>
+  <div class="cyber-grid"></div>
+  <div class="scanline"></div>
 
-  <div id="datetime" class="datetime"></div>
+  <div class="container">
+    <header>
+      <h1 class="glitch" data-text="داشبورد داخلی">داشبورد داخلی</h1>
+      <div class="datetime" id="datetime">...</div>
+    </header>
 
-  <div class="status-cards">
-    <div class="card">
-      <h3>اتاق ۱ (ESP32)</h3>
-      <p>دما: <span id="t1">--</span>°C | رطوبت: <span id="h1">--</span>%</p>
+    <!-- کارت‌های وضعیت -->
+    <div class="summary-cards">
+      <div class="glass card">
+        <div class="card-icon">🌡️</div>
+        <div class="card-info">
+          <h3>اتاق ۱ (ESP32)</h3>
+          <p><span id="s1-temp">--</span>°C | <span id="s1-hum">--</span>%</p>
+        </div>
+      </div>
+      <div class="glass card">
+        <div class="card-icon">🌡️</div>
+        <div class="card-info">
+          <h3>اتاق ۲ (S3)</h3>
+          <p><span id="s2-temp">--</span>°C | <span id="s2-hum">--</span>%</p>
+        </div>
+      </div>
+      <div class="glass card">
+        <div class="card-icon">🚪</div>
+        <div class="card-info">
+          <h3>درب امروز</h3>
+          <p><span id="door-total">0</span> بار</p>
+          <button id="open-door-btn" class="btn">باز کردن درب</button>
+        </div>
+      </div>
+      <div class="glass card">
+        <div class="card-icon">💾</div>
+        <div class="card-info">
+          <h3>حافظه SD</h3>
+          <p><span id="sd-free">--</span>MB آزاد</p>
+        </div>
+      </div>
     </div>
-    <div class="card">
-      <h3>اتاق ۲ (ESP32-S3)</h3>
-      <p>دما: <span id="t2">--</span>°C | رطوبت: <span id="h2">--</span>%</p>
-    </div>
-    <div class="card">
-      <h3>🚪 درب</h3>
-      <p>باز شدن امروز: <span id="door-total">0</span></p>
-      <button id="open-door-btn">باز کردن درب</button>
-    </div>
-    <div class="card">
-      <h3>💾 حافظه SD</h3>
-      <p>کل: <span id="sd-total">--</span>MB | استفاده: <span id="sd-used">--</span>MB</p>
-      <p>آزاد: <span id="sd-free">--</span>MB</p>
-    </div>
-  </div>
 
-  <div class="charts-container">
-    <div class="chart-box">
-      <h3>اتاق ۱</h3>
-      <select class="range-select" data-board="esp32_1">
-        <option value="hourly">ساعتی</option>
-        <option value="daily" selected>روزانه</option>
-        <option value="weekly">هفتگی</option>
-        <option value="monthly">ماهانه</option>
-      </select>
-      <canvas id="chart1"></canvas>
+    <!-- نمودارها -->
+    <div class="charts-grid">
+      <div class="glass chart-box">
+        <div class="chart-toolbar">
+          <h3>اتاق ۱</h3>
+          <select class="range-select" data-board="esp32_1">
+            <option value="hourly">ساعتی</option>
+            <option value="daily" selected>روزانه</option>
+            <option value="weekly">هفتگی</option>
+            <option value="monthly">ماهانه</option>
+          </select>
+        </div>
+        <canvas id="chart1"></canvas>
+      </div>
+      <div class="glass chart-box">
+        <div class="chart-toolbar">
+          <h3>اتاق ۲</h3>
+          <select class="range-select" data-board="esp32_s3">
+            <option value="hourly">ساعتی</option>
+            <option value="daily" selected>روزانه</option>
+            <option value="weekly">هفتگی</option>
+            <option value="monthly">ماهانه</option>
+          </select>
+        </div>
+        <canvas id="chart2"></canvas>
+      </div>
+      <div class="glass chart-box">
+        <div class="chart-toolbar">
+          <h3>آمار درب</h3>
+        </div>
+        <canvas id="chart3"></canvas>
+        <table id="door-table">
+          <thead><tr><th>تگ</th><th>دفعات</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="glass chart-box">
+        <div class="chart-toolbar"><h3>وضعیت SD</h3></div>
+        <canvas id="chart4"></canvas>
+      </div>
     </div>
-    <div class="chart-box">
-      <h3>اتاق ۲</h3>
-      <select class="range-select" data-board="esp32_s3">
-        <option value="hourly">ساعتی</option>
-        <option value="daily" selected>روزانه</option>
-        <option value="weekly">هفتگی</option>
-        <option value="monthly">ماهانه</option>
-      </select>
-      <canvas id="chart2"></canvas>
-    </div>
-  </div>
 
-  <div class="door-table">
-    <h3>جزئیات باز شدن درب امروز</h3>
-    <table id="door-table"><thead><tr><th>تگ</th><th>تعداد</th></tr></thead><tbody></tbody></table>
+    <footer>
+      <p>داده‌ها به‌صورت زنده از حافظهٔ داخلی</p>
+    </footer>
   </div>
 
   <script src="Chart.min.js"></script>
