@@ -5,29 +5,27 @@ document.documentElement.setAttribute('data-theme', theme);
 document.documentElement.lang = lang;
 document.dir = lang === 'fa' ? 'rtl' : 'ltr';
 
-// Translation similar to local
-
-// Jalali date
-function getJalaliDate(gdate) {
-  const gy = gdate.getFullYear(), gm = gdate.getMonth()+1, gd = gdate.getDate();
+// تاریخ شمسی دقیق
+function gregorianToJalali(gy, gm, gd) {
   const gy2 = (gm > 2) ? (gy + 1) : gy;
-  let days = 355666 + 365*gy + Math.floor((gy2+3)/4) - Math.floor((gy2+99)/100) + Math.floor((gy2+399)/400) + gd + Math.floor((153*(gm>2?gm-3:gm+9)+2)/5);
-  let jy = -1595 + 33*Math.floor(days/12053);
+  let days = 355666 + (365 * gy) + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) + gd + Math.floor((153 * (gm > 2 ? (gm - 3) : (gm + 9)) + 2) / 5);
+  let jy = -1595 + (33 * Math.floor(days / 12053));
   days %= 12053;
-  jy += 4*Math.floor(days/1461);
+  jy += 4 * Math.floor(days / 1461);
   days %= 1461;
-  if (days > 365) { jy += Math.floor((days-1)/365); days = (days-1)%365; }
-  const jm = (days < 186) ? 1 + Math.floor(days/31) : 7 + Math.floor((days-186)/30);
-  const jd = 1 + ((days<186) ? days%31 : (days-186)%30);
-  return {year:jy, month:jm, day:jd};
+  if (days > 365) { jy += Math.floor((days - 1) / 365); days = (days - 1) % 365; }
+  const jm = (days < 186) ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30);
+  const jd = 1 + ((days < 186) ? (days % 31) : ((days - 186) % 30));
+  return { year: jy, month: jm, day: jd };
 }
 function updateDateTime() {
   const now = new Date();
-  const j = getJalaliDate(now);
-  const jstr = `${j.year}/${String(j.month).padStart(2,'0')}/${String(j.day).padStart(2,'0')} ${now.toLocaleTimeString('fa-IR')}`;
-  document.getElementById('datetime').textContent = '📅 ' + jstr;
+  const j = gregorianToJalali(now.getFullYear(), now.getMonth()+1, now.getDate());
+  document.getElementById('datetime').textContent = `📅 ${j.year}/${String(j.month).padStart(2,'0')}/${String(j.day).padStart(2,'0')} ${now.toLocaleTimeString('fa-IR')}`;
 }
 setInterval(updateDateTime, 1000); updateDateTime();
+
+// بقیهٔ کد مانند قبل (ترجمه، تم، fetch CSVها و نمودارها) ...
 
 // CSV helpers
 async function fetchCSV(board, date) {
