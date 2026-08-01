@@ -3,82 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>داشبورد هوشمند</title>
+  <title>داشبورد خانه هوشمند</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="bg-anim"></div>
-  <div class="container glass">
-    <header>
+  <!-- پس‌زمینه ستاره‌ای -->
+  <div class="stars"></div>
+  <!-- شفق قطبی -->
+  <div class="aurora"></div>
+  <!-- المان‌های شناور -->
+  <div class="floating-icons">
+    <span class="float-icon" style="top:10%;left:5%;"><i class="fas fa-microchip"></i></span>
+    <span class="float-icon" style="top:80%;left:90%;"><i class="fas fa-network-wired"></i></span>
+    <span class="float-icon" style="top:40%;left:95%;"><i class="fas fa-temperature-high"></i></span>
+  </div>
+
+  <div class="container">
+    <header class="glass">
       <h1 class="neon-text" data-lang="title">🏠 خانه هوشمند</h1>
       <div class="datetime" id="datetime">--</div>
       <div class="controls">
-        <button id="theme-toggle">🌓</button>
-        <button id="lang-toggle">فا / En</button>
+        <button id="theme-toggle" class="glass-btn">🌓</button>
+        <button id="lang-toggle" class="glass-btn">فا / En</button>
       </div>
     </header>
 
-    <!-- کارت‌های وضعیت -->
-    <div class="status-cards">
-      <div class="card glass">
+    <!-- نوار وضعیت نودها -->
+    <div class="node-status-bar glass">
+      <div class="node" id="node-hub"><span>🖥️ هاب</span><span class="status-dot"></span></div>
+      <div class="node" id="node-s3"><span>🌡️ سنسور S3</span><span class="status-dot"></span></div>
+      <div class="node" id="node-door"><span>🚪 دربازکن</span><span class="status-dot"></span></div>
+    </div>
+
+    <!-- کارت‌های داده‌های زنده -->
+    <div class="cards-row">
+      <div class="glass card">
+        <i class="fas fa-thermometer-half card-icon"></i>
         <h3 data-lang="room1">اتاق ۱</h3>
         <p>🌡️ <span id="t1">--</span>°C | 💧 <span id="h1">--</span>%</p>
       </div>
-      <div class="card glass">
+      <div class="glass card">
+        <i class="fas fa-thermometer-half card-icon"></i>
         <h3 data-lang="room2">اتاق ۲ (S3)</h3>
         <p>🌡️ <span id="t2">--</span>°C | 💧 <span id="h2">--</span>%</p>
       </div>
-      <div class="card glass">
-        <h3 data-lang="door">🚪 درب</h3>
-        <p data-lang="doorOpen">باز شدن امروز: <span id="door-total">0</span></p>
-        <button id="open-door" data-lang="openDoor">باز کردن درب</button>
+      <div class="glass card">
+        <i class="fas fa-door-open card-icon"></i>
+        <h3 data-lang="door">درب</h3>
+        <p data-lang="doorOpen">امروز: <span id="door-total">0</span> بار</p>
+        <button id="open-door" class="btn neon-btn" data-lang="openDoor">باز کردن درب</button>
       </div>
-      <div class="card glass">
-        <h3 data-lang="sd">💾 حافظه</h3>
+      <div class="glass card">
+        <i class="fas fa-sd-card card-icon"></i>
+        <h3 data-lang="sd">حافظه SD</h3>
         <p>آزاد: <span id="sd-free">--</span>MB / <span id="sd-total">--</span>MB</p>
-      </div>
-    </div>
-
-    <!-- پنل نودها -->
-    <div class="node-panel glass">
-      <h2 data-lang="nodes">وضعیت نودها</h2>
-      <div class="nodes">
-        <span class="node" id="node-hub">🖥️ هاب <span class="status"></span></span>
-        <span class="node" id="node-s3">🌡️ S3 <span class="status"></span></span>
-        <span class="node" id="node-door">🚪 درب <span class="status"></span></span>
       </div>
     </div>
 
     <!-- نمودارها -->
     <div class="charts-grid">
-      <div class="chart-card glass">
-        <h3 data-lang="chart1">نمودار اتاق ۱</h3>
-        <select class="range-select" data-board="esp32_1">
-          <option value="hourly">ساعتی</option>
-          <option value="daily" selected>روزانه</option>
-          <option value="weekly">هفتگی</option>
-          <option value="monthly">ماهانه</option>
-        </select>
+      <div class="glass chart-card">
+        <div class="chart-header">
+          <h3 data-lang="chart1">نمودار اتاق ۱</h3>
+          <select class="range-select" data-board="esp32_1">
+            <option value="hourly">ساعتی</option>
+            <option value="daily" selected>روزانه</option>
+            <option value="weekly">هفتگی</option>
+            <option value="monthly">ماهانه</option>
+          </select>
+        </div>
         <canvas id="chart1"></canvas>
       </div>
-      <div class="chart-card glass">
-        <h3 data-lang="chart2">نمودار اتاق ۲</h3>
-        <select class="range-select" data-board="esp32_s3">
-          <option value="hourly">ساعتی</option>
-          <option value="daily" selected>روزانه</option>
-          <option value="weekly">هفتگی</option>
-          <option value="monthly">ماهانه</option>
-        </select>
+      <div class="glass chart-card">
+        <div class="chart-header">
+          <h3 data-lang="chart2">نمودار اتاق ۲</h3>
+          <select class="range-select" data-board="esp32_s3">
+            <option value="hourly">ساعتی</option>
+            <option value="daily" selected>روزانه</option>
+            <option value="weekly">هفتگی</option>
+            <option value="monthly">ماهانه</option>
+          </select>
+        </div>
         <canvas id="chart2"></canvas>
       </div>
     </div>
 
     <!-- جدول تگ‌های درب -->
-    <div class="door-table glass">
+    <div class="glass table-card">
       <h3 data-lang="doorTags">تگ‌های امروز</h3>
-      <table>
+      <table id="door-tags-table">
         <thead><tr><th>تگ</th><th>دفعات</th></tr></thead>
-        <tbody id="door-tags"></tbody>
+        <tbody></tbody>
       </table>
     </div>
   </div>
