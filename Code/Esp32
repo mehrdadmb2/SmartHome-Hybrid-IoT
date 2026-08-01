@@ -1,12 +1,11 @@
 /*
- * SmartHome-Hybrid-IoT - ESP32 Hub (نسخه نهایی پایدار)
- * آی‌پی: 192.168.1.119 (ثابت)
- * NTP: 178.22.122.100 (IP مستقیم ایران)
- * پین‌ها:
- *  I2C OLED 128x64: SDA=5, SCL=4
- *  DHT22: 13
- *  SD: CS=15, MOSI=12, MISO=14, SCK=2
- *  UART به آردوینو: RX2=16, TX2=17
+ * SmartHome-Hybrid-IoT - ESP32 Hub (IP مستقیم گیت‌هاب)
+ * آی‌پی: 192.168.1.119
+ * پین‌ها: مشابه قبل
+ * 
+ * تغییرات مهم:
+ *  - استفاده از IP مستقیم برای دور زدن تحریم/فیلتر
+ *  - تست اتصال به GitHub API در سلف‌تست
  */
 
 #include <WiFi.h>
@@ -32,12 +31,17 @@ IPAddress localIP(192, 168, 1, 119);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
 
-// ---------- گیت‌هاب ----------
+// ---------- گیت‌هاب با IP مستقیم ----------
 String githubUser   = "mehrdadmb2";
 String githubRepo   = "SmartHome-Hybrid-IoT";
 String githubBranch = "main";
 String githubToken  = "";
-const char* GITHUB_RAW = "https://raw.githubusercontent.com/mehrdadmb2/SmartHome-Hybrid-IoT/main/site/";
+
+// IPهای مستقیم GitHub (از nslookup یا ping بگیرید)
+const String RAW_IP   = "185.199.108.133";   // raw.githubusercontent.com
+const String API_IP   = "140.82.121.5";      // api.github.com
+const String HOST_RAW = "raw.githubusercontent.com";
+const String HOST_API = "api.github.com";
 
 // ---------- پین‌ها ----------
 #define I2C_SDA   5
@@ -56,7 +60,7 @@ DHT dht(DHTPIN, DHTTYPE);
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "178.22.122.100", 3.5*3600, 60000); // IP مستقیم ایران
+NTPClient timeClient(ntpUDP, "178.22.122.100", 3.5*3600, 60000);
 
 AsyncWebServer server(80);
 
@@ -84,14 +88,15 @@ JalaliDate gregorianToJalali(int gy, int gm, int gd) {
   return {jy, jm, jd};
 }
 
-// ---------- سلف‌تست ----------
+// ---------- سلف‌تست (با تست GitHub API) ----------
 void selfTest() {
   Serial.println("\n========== SELF TEST START ==========");
   
-  Serial.print("[1/5] OLED init... ");
+  // 1. OLED
+  Serial.print("[1/7] OLED init... ");
   Wire.begin(I2C_SDA, I2C_SCL);
   if (display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
-    Serial.println("OK (0x3C)");
+    Serial.println("OK");
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
@@ -101,7 +106,8 @@ void selfTest() {
     delay(1000);
   } else Serial.println("FAILED");
 
-  Serial.print("[2/5] SD Card init... ");
+  // 2. SD
+  Serial.print("[2/7] SD Card init... ");
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
   delay(100);
   if (SD.begin(SD_CS)) {
@@ -121,7 +127,8 @@ void selfTest() {
     }
   } else Serial.println("FAILED");
 
-  Serial.print("[3/5] WiFi connect... ");
+  // 3. WiFi
+  Serial.print("[3/7] WiFi connect... ");
   WiFi.config(localIP, gateway, subnet);
   WiFi.begin(ssid, password);
   int attempts = 0;
@@ -133,14 +140,46 @@ void selfTest() {
     Serial.print("    IP: "); Serial.println(WiFi.localIP());
   } else Serial.println(" FAILED");
 
-  Serial.print("[4/5] NTP sync... ");
+  // 4. تست دسترسی به GitHub API (با IP مستقیم)
+  Serial.print("[4/7] GitHub API test... ");
+  if (WiFi.status() == WL_CONNECTED && githubToken.length() > 0) {
+    HTTPClient http;
+    String url = "https://" + API_IP + "/repos/" + githubUser + "/" + githubRepo;
+    http.begin(url);
+    http.addHeader("Host", HOST_API);
+    http.addHeader("Authorization", "token " + githubToken);
+    http.addHeader("User-Agent", "ESP32-Hub");
+    int code = http.GET();
+    if (code == 200) Serial.println("OK (token valid)");
+    else Serial.printf("HTTP %d\n", code);
+    http.end();
+  } else {
+    Serial.println("SKIP (no WiFi/token)");
+  }
+
+  // 5. دانلود تست یک فایل کوچک (index.html) با IP مستقیم
+  Serial.print("[5/7] GitHub download test... ");
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String url = "https://" + RAW_IP + "/" + githubUser + "/" + githubRepo + "/main/site/index.html";
+    http.begin(url);
+    http.addHeader("Host", HOST_RAW);
+    int code = http.GET();
+    if (code == 200) Serial.println("OK");
+    else Serial.printf("HTTP %d\n", code);
+    http.end();
+  } else Serial.println("SKIP");
+
+  // 6. NTP
+  Serial.print("[6/7] NTP sync... ");
   timeClient.begin();
   if (timeClient.update()) {
     Serial.println("OK");
     Serial.print("    Time: "); Serial.println(getTimeStr());
-  } else Serial.println("FAILED (using build time)");
+  } else Serial.println("FAILED");
 
-  Serial.print("[5/5] DHT22 test read... ");
+  // 7. DHT22
+  Serial.print("[7/7] DHT22 test read... ");
   dht.begin();
   delay(2000);
   float t = dht.readTemperature();
@@ -174,28 +213,30 @@ void setup() {
   Serial.println("Hub ready. Web server started.");
 }
 
+// ---------- دانلود فایل‌های سایت (با IP مستقیم) ----------
 void downloadWebFiles() {
   const char* files[] = {"index.html", "style.css", "app.js", "Chart.min.js"};
   for (auto filename : files) {
     HTTPClient http;
-    String url = String(GITHUB_RAW) + filename;
-    Serial.printf("Downloading %s ... ", url.c_str());
+    String url = "https://" + RAW_IP + "/" + githubUser + "/" + githubRepo + "/main/site/" + String(filename);
     http.begin(url);
+    http.addHeader("Host", HOST_RAW);
     int code = http.GET();
     if (code == 200) {
       String content = http.getString();
       String path = "/www/" + String(filename);
       if (SD.exists(path)) SD.remove(path);
       File f = SD.open(path, FILE_WRITE);
-      if (f) { f.print(content); f.close(); Serial.printf("OK (%d bytes)\n", content.length()); }
+      if (f) { f.print(content); f.close(); Serial.printf("Updated %s\n", filename); }
       else Serial.println("SD write FAILED");
-    } else Serial.printf("HTTP %d\n", code);
+    } else Serial.printf("Download %s: HTTP %d\n", filename, code);
     http.end(); delay(200);
   }
 }
 
 // ---------- وب‌سرور ----------
 void setupServer() {
+  // /api/debug
   server.on("/api/debug", HTTP_GET, [](AsyncWebServerRequest *request){
     String html = "<html><body><h2>/www contents</h2><ul>";
     File root = SD.open("/www");
@@ -211,7 +252,7 @@ void setupServer() {
     request->send(200, "text/html", html);
   });
 
-  // دریافت داده از S3
+  // /api/sensor
   server.on("/api/sensor", HTTP_POST, [](AsyncWebServerRequest *request){
     if (request->hasParam("plain", true)) {
       StaticJsonDocument<200> doc;
@@ -225,7 +266,7 @@ void setupServer() {
     request->send(200);
   });
 
-  // وضعیت لحظه‌ای سنسورها
+  // /api/current
   server.on("/api/current", HTTP_GET, [](AsyncWebServerRequest *request){
     DynamicJsonDocument doc(300);
     doc["esp32_1_temp"] = localTemp;
@@ -236,7 +277,7 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
-  // وضعیت نودها
+  // /api/nodestatus
   server.on("/api/nodestatus", HTTP_GET, [](AsyncWebServerRequest *request){
     DynamicJsonDocument doc(256);
     doc["hub_online"] = true;
@@ -246,7 +287,7 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
-  // ... (بقیه APIها مشابه قبل: /api/data, /api/stats/door, /api/sdinfo, /api/datetime, /open, دانلود CSV)
+  // /api/data
   server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest *request){
     String board = request->getParam("board")->value();
     String range = request->hasParam("range") ? request->getParam("range")->value() : "daily";
@@ -255,6 +296,7 @@ void setupServer() {
     request->send(200, "application/json", json);
   });
 
+  // /api/stats/door
   server.on("/api/stats/door", HTTP_GET, [](AsyncWebServerRequest *request){
     String date = request->hasParam("date") ? request->getParam("date")->value() : getISODate();
     String filename = "/data/door_" + date + ".csv";
@@ -283,6 +325,7 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
+  // /api/sdinfo
   server.on("/api/sdinfo", HTTP_GET, [](AsyncWebServerRequest *request){
     DynamicJsonDocument doc(256);
     doc["total_mb"] = SD.totalBytes() / (1024*1024);
@@ -292,6 +335,7 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
+  // /api/datetime
   server.on("/api/datetime", HTTP_GET, [](AsyncWebServerRequest *request){
     timeClient.update();
     time_t now = timeClient.getEpochTime();
@@ -306,11 +350,13 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
+  // /open
   server.on("/open", HTTP_GET, [](AsyncWebServerRequest *request){
     Serial2.println("OPEN_DOOR");
     request->send(200);
   });
 
+  // دانلود CSV
   server.on("/download/sensor1", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(SD, "/data/esp32_1_" + getISODate() + ".csv", "text/csv", true); });
   server.on("/download/sensor2", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(SD, "/data/esp32_s3_" + getISODate() + ".csv", "text/csv", true); });
   server.on("/download/door", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(SD, "/data/door_" + getISODate() + ".csv", "text/csv", true); });
@@ -348,12 +394,7 @@ void loop() {
   }
 }
 
-// ---------- توابع CSV و بازه و پاک‌سازی و گیت‌هاب (مانند کدهای قبلی) ----------
-// (کد دقیقاً مشابه نسخه‌های قبلی، جهت اختصار تکرار نمی‌شود. کافی است توابع زیر را از آخرین کد کامل هاب کپی کنید:
-// logSensorCSV, logDoorEvent, appendCSV, getDataRange, checkAndCleanSD, pushToGitHub, getGitSHA, addGitHubFile,
-// readFile, updateOLED, getISODate, getTimeStr )
-
-// ---------- CSV ----------
+// ---------- توابع CSV ----------
 void logSensorCSV(const String& board, float t, float h) {
   String date = getISODate();
   String filename = "/data/" + board + "_" + date + ".csv";
@@ -473,21 +514,20 @@ void checkAndCleanSD() {
   }
 }
 
-// ---------- گیت‌هاب ----------
+// ---------- گیت‌هاب (آپلود با IP مستقیم) ----------
 void pushToGitHub() {
   String date = getISODate();
   String boards[] = {"esp32_1", "esp32_s3", "door"};
   for (auto board : boards) {
-    String path = "data/" + board + "_" + date + ".csv";
-    String local = "/data/" + board + "_" + date + ".csv";
-    if (!SD.exists(local)) continue;
-    String content = readFile(local.c_str());
+    String content = readFile(("/data/" + board + "_" + date + ".csv").c_str());
     if (content.isEmpty()) continue;
+    String path = "data/" + board + "_" + date + ".csv";
     String sha = getGitSHA(path);
     addGitHubFile(path, content, sha);
     delay(1000);
   }
 
+  // sdinfo.json
   DynamicJsonDocument sdoc(256);
   sdoc["total_mb"] = SD.totalBytes()/(1024*1024);
   sdoc["used_mb"] = SD.usedBytes()/(1024*1024);
@@ -496,6 +536,7 @@ void pushToGitHub() {
   String sha = getGitSHA("sdinfo.json");
   addGitHubFile("sdinfo.json", sdjson, sha);
 
+  // node_status.json
   unsigned long now = millis();
   bool s3online = (now - lastS3Data < NODE_TIMEOUT * 1000);
   bool dooronline = (now - lastDoorEvent < NODE_TIMEOUT * 1000);
@@ -522,7 +563,9 @@ void pushToGitHub() {
 
 String getGitSHA(const String& path) {
   HTTPClient http;
-  http.begin("https://api.github.com/repos/" + githubUser + "/" + githubRepo + "/contents/" + path + "?ref=" + githubBranch);
+  String url = "https://" + API_IP + "/repos/" + githubUser + "/" + githubRepo + "/contents/" + path + "?ref=" + githubBranch;
+  http.begin(url);
+  http.addHeader("Host", HOST_API);
   http.addHeader("Authorization", "token " + githubToken);
   http.addHeader("User-Agent", "ESP32-Hub");
   int code = http.GET();
@@ -545,7 +588,9 @@ void addGitHubFile(const String& path, const String& content, const String& sha)
   b64.replace("\n", "");
 
   HTTPClient http;
-  http.begin("https://api.github.com/repos/" + githubUser + "/" + githubRepo + "/contents/" + path);
+  String url = "https://" + API_IP + "/repos/" + githubUser + "/" + githubRepo + "/contents/" + path;
+  http.begin(url);
+  http.addHeader("Host", HOST_API);
   http.addHeader("Authorization", "token " + githubToken);
   http.addHeader("User-Agent", "ESP32-Hub");
   http.addHeader("Content-Type", "application/json");
