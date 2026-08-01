@@ -7,56 +7,57 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>🏠 داشبورد خانه</h1>
+  <h1>🏠 داشبورد خانه هوشمند</h1>
 
-  <div class="current-status">
+  <div id="datetime" class="datetime"></div>
+
+  <div class="status-cards">
     <div class="card">
       <h3>اتاق ۱ (ESP32)</h3>
-      <p>دما: <span id="t1">--</span>°C</p>
-      <p>رطوبت: <span id="h1">--</span>%</p>
+      <p>دما: <span id="t1">--</span>°C | رطوبت: <span id="h1">--</span>%</p>
     </div>
     <div class="card">
       <h3>اتاق ۲ (ESP32-S3)</h3>
-      <p>دما: <span id="t2">--</span>°C</p>
-      <p>رطوبت: <span id="h2">--</span>%</p>
+      <p>دما: <span id="t2">--</span>°C | رطوبت: <span id="h2">--</span>%</p>
     </div>
     <div class="card">
       <h3>🚪 درب</h3>
       <p>باز شدن امروز: <span id="door-total">0</span></p>
       <button id="open-door-btn">باز کردن درب</button>
     </div>
+    <div class="card">
+      <h3>💾 حافظه SD</h3>
+      <p>کل: <span id="sd-total">--</span>MB | استفاده: <span id="sd-used">--</span>MB</p>
+      <p>آزاد: <span id="sd-free">--</span>MB</p>
+    </div>
   </div>
 
-  <div class="controls">
-    <label>سنسور:
-      <select id="board-select">
-        <option value="esp32_1">اتاق ۱</option>
-        <option value="esp32_s3">اتاق ۲</option>
-      </select>
-    </label>
-    <label>بازه:
-      <select id="range-select">
-        <option value="daily">امروز</option>
-        <option value="hourly">ساعت اخیر</option>
+  <div class="charts-container">
+    <div class="chart-box">
+      <h3>اتاق ۱</h3>
+      <select class="range-select" data-board="esp32_1">
+        <option value="hourly">ساعتی</option>
+        <option value="daily" selected>روزانه</option>
         <option value="weekly">هفتگی</option>
         <option value="monthly">ماهانه</option>
       </select>
-    </label>
-    <a href="/download/sensor1" download>⬇️ CSV اتاق ۱</a>
-    <a href="/download/sensor2" download>⬇️ CSV اتاق ۲</a>
-    <a href="/download/door" download>⬇️ CSV درب</a>
+      <canvas id="chart1"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>اتاق ۲</h3>
+      <select class="range-select" data-board="esp32_s3">
+        <option value="hourly">ساعتی</option>
+        <option value="daily" selected>روزانه</option>
+        <option value="weekly">هفتگی</option>
+        <option value="monthly">ماهانه</option>
+      </select>
+      <canvas id="chart2"></canvas>
+    </div>
   </div>
 
-  <div class="chart-container">
-    <canvas id="chart"></canvas>
-  </div>
-
-  <div class="door-stats">
+  <div class="door-table">
     <h3>جزئیات باز شدن درب امروز</h3>
-    <table id="door-table">
-      <thead><tr><th>تگ</th><th>تعداد</th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <table id="door-table"><thead><tr><th>تگ</th><th>تعداد</th></tr></thead><tbody></tbody></table>
   </div>
 
   <script src="Chart.min.js"></script>
