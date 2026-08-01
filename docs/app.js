@@ -5,9 +5,9 @@ document.documentElement.setAttribute('data-theme', theme);
 document.documentElement.lang = lang;
 document.dir = lang === 'fa' ? 'rtl' : 'ltr';
 
-// ترجمه‌ها مشابه قبل (می‌توانید اضافه کنید)
+// Translation similar to local
 
-// تاریخ
+// Jalali date
 function getJalaliDate(gdate) {
   const gy = gdate.getFullYear(), gm = gdate.getMonth()+1, gd = gdate.getDate();
   const gy2 = (gm > 2) ? (gy + 1) : gy;
@@ -66,7 +66,7 @@ async function getDataRange(board, range, endDate) {
   return all;
 }
 
-// Live values from latest CSV record
+// Live values
 async function updateLatest() {
   const today = new Date().toISOString().slice(0,10);
   try {
@@ -82,14 +82,32 @@ async function updateLatest() {
     }
     const door = await fetchCSV('door', today);
     document.getElementById('door-total').textContent = door.length;
-    // SD info from sdinfo.json
     const sd = await fetch(REPO + 'sdinfo.json').then(r=>r.json());
     document.getElementById('sd-free').textContent = sd.free_mb;
   } catch(e) {}
 }
 setInterval(updateLatest, 60000); updateLatest();
 
-// Charts (similar to local, with Papa parse)
+// Node status from node_status.json
+async function updateNodeStatus() {
+  try {
+    const resp = await fetch(REPO + 'node_status.json');
+    const d = await resp.json();
+    setNodeStatus('hub-status', d.hub_online);
+    setNodeStatus('s3-status', d.s3_online);
+    setNodeStatus('door-status', d.door_online);
+  } catch(e) {}
+}
+function setNodeStatus(id, online) {
+  const dot = document.getElementById(id);
+  if (dot) {
+    dot.style.background = online ? 'var(--green)' : 'var(--red)';
+    dot.style.boxShadow = online ? '0 0 10px var(--green)' : '0 0 5px var(--red)';
+  }
+}
+setInterval(updateNodeStatus, 30000); updateNodeStatus();
+
+// Charts
 const charts = {};
 async function drawChart(board, canvasId, range, refDate) {
   const data = await getDataRange(board, range, refDate || new Date().toISOString().slice(0,10));
@@ -106,7 +124,29 @@ async function drawChart(board, canvasId, range, refDate) {
         { label: 'رطوبت', data: hums, borderColor: '#0ff', yAxisID: 'y1' }
       ]
     },
-    options: { /* ... */ }
+    options: {
+      responsive: true,
+      scales: {
+        y: { type:'linear', position:'left', title:{display:true, text:'دما'} },
+        y1: { type:'linear', position:'right', title:{display:true, text:'رطوبت'}, grid:{drawOnChartArea:false} }
+      }
+    }
   });
 }
-// event listeners etc.
+
+document.querySelectorAll('.range-select, .date-picker').forEach(el => {
+  el.addEventListener('change', () => {
+    const board = el.dataset.board;
+    const range = document.querySelector(`.range-select[data-board="${board}"]`).value;
+    const date = document.querySelector(`.date-picker[data-board="${board}"]`).value || new Date().toISOString().slice(0,10);
+    drawChart(board, board==='esp32_1'?'chart1':'chart2', range, date);
+  });
+  if (el.classList.contains('range-select')) {
+    // initial
+    const board = el.dataset.board;
+    const date = new Date().toISOString().slice(0,10);
+    drawChart(board, board==='esp32_1'?'chart1':'chart2', el.value, date);
+  }
+});
+
+// Theme/lang (same as local)
