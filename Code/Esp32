@@ -1,7 +1,7 @@
 /*
- * SmartHome-Hybrid-IoT - ESP32 Hub (سلف‌تست کامل)
+ * SmartHome-Hybrid-IoT - ESP32 Hub (رفع NTP و وب‌سایت)
  * آی‌پی: 192.168.1.119 (ثابت)
- * 
+ * NTP: 0.asia.pool.ntp.org
  * پین‌ها:
  *  I2C OLED 128x64: SDA=5, SCL=4
  *  DHT22: 13
@@ -35,10 +35,10 @@ IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
 
 // ---------- گیت‌هاب ----------
-String githubUser   = "mehrdadmb2";             // ← جایگزین کن
-String githubRepo   = "SmartHome-Hybrid-IoT";   // ← جایگزین کن
+String githubUser   = "mehrdadmb2";
+String githubRepo   = "SmartHome-Hybrid-IoT";
 String githubBranch = "main";
-String githubToken  = "";                       // از /config.txt خوانده می‌شود
+String githubToken  = "";
 const char* GITHUB_RAW = "https://raw.githubusercontent.com/mehrdadmb2/SmartHome-Hybrid-IoT/main/site/";
 
 // ---------- پین‌ها ----------
@@ -60,18 +60,17 @@ DHT dht(DHTPIN, DHTTYPE);
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 3.5*3600, 60000); // UTC+3:30 ایران
+// تغییر به NTP داخلی ایران
+NTPClient timeClient(ntpUDP, "0.asia.pool.ntp.org", 3.5*3600, 60000);
 
 AsyncWebServer server(80);
 
-// داده‌های لحظه‌ای
 float localTemp = 0, localHum = 0;
 float s3Temp = 0, s3Hum = 0;
 
-// وضعیت نودها
 unsigned long lastS3Data = 0;
 unsigned long lastDoorEvent = 0;
-const unsigned long NODE_TIMEOUT = 600; // ۱۰ دقیقه
+const unsigned long NODE_TIMEOUT = 600;
 
 unsigned long lastGitPush = 0;
 const unsigned long PUSH_INTERVAL = 30 * 60 * 1000;
@@ -95,7 +94,7 @@ JalaliDate gregorianToJalali(int gy, int gm, int gd) {
 void selfTest() {
   Serial.println("\n========== SELF TEST START ==========");
   
-  // 1. I2C و OLED
+  // 1. OLED
   Serial.print("[1/5] OLED init... ");
   Wire.begin(I2C_SDA, I2C_SCL);
   if (display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
@@ -111,7 +110,7 @@ void selfTest() {
     Serial.println("FAILED");
   }
 
-  // 2. SD Card
+  // 2. SD
   Serial.print("[2/5] SD Card init... ");
   SPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
   delay(100);
@@ -119,7 +118,6 @@ void selfTest() {
     Serial.println("OK");
     if (!SD.exists("/data")) SD.mkdir("/data");
     if (!SD.exists("/www")) SD.mkdir("/www");
-    // خواندن توکن
     File f = SD.open("/config.txt");
     if (f) {
       String line = f.readStringUntil('\n');
@@ -130,8 +128,6 @@ void selfTest() {
         Serial.println("   GitHub token loaded.");
       }
       f.close();
-    } else {
-      Serial.println("   config.txt not found.");
     }
   } else {
     Serial.println("FAILED");
@@ -163,7 +159,7 @@ void selfTest() {
     Serial.print("    Time: ");
     Serial.println(getTimeStr());
   } else {
-    Serial.println("FAILED");
+    Serial.println("FAILED (using time from build)");
   }
 
   // 5. DHT22
@@ -176,9 +172,9 @@ void selfTest() {
     Serial.printf("OK (%.1f°C, %.1f%%)\n", t, h);
     localTemp = t;
     localHum = h;
-    updateOLED(t, h);  // نمایش روی OLED
+    updateOLED(t, h);
   } else {
-    Serial.println("FAILED (check wiring)");
+    Serial.println("FAILED");
   }
 
   Serial.println("========== SELF TEST COMPLETE ==========\n");
@@ -190,43 +186,46 @@ void setup() {
   delay(500);
   Serial.println("\nSmartHome Hub starting...");
   
-  // I2C و OLED اولیه (برای سلف‌تست)
   Wire.begin(I2C_SDA, I2C_SCL);
   display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
   display.clearDisplay();
   display.display();
   
-  // انجام تست‌ها
   selfTest();
 
-  // ادامه راه‌اندازی
+  // دانلود فایل‌های وب اگر WiFi وصل است
   if (WiFi.status() == WL_CONNECTED) {
-    downloadWebFiles();   // دانلود فایل‌های سایت از گیت‌هاب
+    downloadWebFiles();
   }
+
+  // اگر هنوز /www خالی است، یک صفحه پیش‌فرض ایجاد کن
+  if (!SD.exists("/www/index.html")) {
+    createDefaultPage();
+  }
+
   setupServer();
   Serial.println("Hub ready. Web server started.");
 }
 
-void connectWiFi() {
-  // خالی؛ در سلف‌تست انجام شده
+// ---------- ایجاد صفحه پیش‌فرض در صورت نبود فایل ----------
+void createDefaultPage() {
+  File f = SD.open("/www/index.html", FILE_WRITE);
+  if (f) {
+    f.println("<html><body><h1>Hub Online</h1><p>Web files not loaded. Please check SD card and GitHub token.</p></body></html>");
+    f.close();
+    Serial.println("Default index.html created.");
+  }
 }
 
-// ---------- SD ----------
-void initSD() {
-  // در سلف‌تست انجام شده
-}
-
-void loadConfig() {
-  // در سلف‌تست انجام شده
-}
-
-// ---------- دانلود فایل‌های وب‌سایت ----------
+// ---------- دانلود فایل‌های وب از گیت‌هاب ----------
 void downloadWebFiles() {
   if (WiFi.status() != WL_CONNECTED) return;
   const char* files[] = {"index.html", "style.css", "app.js", "Chart.min.js"};
   for (auto filename : files) {
     HTTPClient http;
-    http.begin(String(GITHUB_RAW) + filename);
+    String url = String(GITHUB_RAW) + filename;
+    Serial.printf("Downloading %s ... ", url.c_str());
+    http.begin(url);
     int code = http.GET();
     if (code == 200) {
       String content = http.getString();
@@ -236,16 +235,39 @@ void downloadWebFiles() {
       if (f) {
         f.print(content);
         f.close();
-        Serial.printf("Updated %s\n", filename);
+        Serial.printf("OK (%d bytes)\n", content.length());
+      } else {
+        Serial.println("SD write FAILED");
       }
+    } else {
+      Serial.printf("HTTP %d\n", code);
     }
     http.end();
     delay(200);
   }
 }
 
-// ---------- وب‌سرور ----------
+// ---------- راه‌اندازی وب‌سرور ----------
 void setupServer() {
+  // Endpoint دیباگ: محتویات /www
+  server.on("/api/debug", HTTP_GET, [](AsyncWebServerRequest *request){
+    String html = "<html><body><h2>SD Card /www contents</h2><ul>";
+    File root = SD.open("/www");
+    if (!root || !root.isDirectory()) {
+      html += "<li>/www folder not found!</li>";
+    } else {
+      File file = root.openNextFile();
+      while (file) {
+        html += "<li>" + String(file.name()) + " (" + String(file.size()) + " bytes)</li>";
+        file = root.openNextFile();
+      }
+      root.close();
+    }
+    html += "</ul></body></html>";
+    request->send(200, "text/html", html);
+  });
+
+  // دریافت داده از S3
   server.on("/api/sensor", HTTP_POST, [](AsyncWebServerRequest *request){
     if (request->hasParam("plain", true)) {
       StaticJsonDocument<200> doc;
@@ -259,6 +281,7 @@ void setupServer() {
     request->send(200);
   });
 
+  // وضعیت لحظه‌ای
   server.on("/api/current", HTTP_GET, [](AsyncWebServerRequest *request){
     DynamicJsonDocument doc(300);
     doc["esp32_1_temp"] = localTemp;
@@ -269,6 +292,7 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
+  // داده‌های سنسور با بازه
   server.on("/api/data", HTTP_GET, [](AsyncWebServerRequest *request){
     String board = request->getParam("board")->value();
     String range = request->hasParam("range") ? request->getParam("range")->value() : "daily";
@@ -277,6 +301,7 @@ void setupServer() {
     request->send(200, "application/json", json);
   });
 
+  // آمار درب
   server.on("/api/stats/door", HTTP_GET, [](AsyncWebServerRequest *request){
     String date = request->hasParam("date") ? request->getParam("date")->value() : getISODate();
     String filename = "/data/door_" + date + ".csv";
@@ -308,6 +333,7 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
+  // SD info
   server.on("/api/sdinfo", HTTP_GET, [](AsyncWebServerRequest *request){
     DynamicJsonDocument doc(256);
     doc["total_mb"] = SD.totalBytes() / (1024*1024);
@@ -317,6 +343,7 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
+  // تاریخ شمسی + میلادی
   server.on("/api/datetime", HTTP_GET, [](AsyncWebServerRequest *request){
     timeClient.update();
     time_t now = timeClient.getEpochTime();
@@ -331,11 +358,13 @@ void setupServer() {
     request->send(200, "application/json", out);
   });
 
+  // باز کردن درب
   server.on("/open", HTTP_GET, [](AsyncWebServerRequest *request){
     Serial2.println("OPEN_DOOR");
     request->send(200, "text/plain", "OK");
   });
 
+  // دانلود CSV
   server.on("/download/sensor1", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SD, "/data/esp32_1_" + getISODate() + ".csv", "text/csv", true);
   });
@@ -346,6 +375,7 @@ void setupServer() {
     request->send(SD, "/data/door_" + getISODate() + ".csv", "text/csv", true);
   });
 
+  // سرو فایل‌های استاتیک
   server.serveStatic("/", SD, "/www/").setDefaultFile("index.html");
   server.begin();
   Serial.println("Web server started");
