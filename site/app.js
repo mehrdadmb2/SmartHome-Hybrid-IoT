@@ -6,8 +6,16 @@ document.documentElement.lang = lang;
 document.dir = lang === 'fa' ? 'rtl' : 'ltr';
 
 const translations = {
-  fa: { title: '🏠 خانه هوشمند', room1: 'اتاق ۱', room2: 'اتاق ۲ (S3)', door: '🚪 درب', doorOpen: 'باز شدن امروز:', openDoor: 'باز کردن درب', sd: '💾 حافظه', nodes: 'وضعیت نودها', chart1: 'نمودار اتاق ۱', chart2: 'نمودار اتاق ۲', doorTags: 'تگ‌های امروز' },
-  en: { title: '🏠 Smart Home', room1: 'Room 1', room2: 'Room 2 (S3)', door: '🚪 Door', doorOpen: 'Opened today:', openDoor: 'Open Door', sd: '💾 Storage', nodes: 'Node Status', chart1: 'Room 1 Chart', chart2: 'Room 2 Chart', doorTags: 'Today Tags' }
+  fa: {
+    title: '🏠 خانه هوشمند', room1: 'اتاق ۱', room2: 'اتاق ۲ (S3)',
+    door: '🚪 درب', doorOpen: 'امروز:', openDoor: 'باز کردن درب', sd: '💾 حافظه SD',
+    chart1: 'نمودار اتاق ۱', chart2: 'نمودار اتاق ۲', doorTags: 'تگ‌های امروز'
+  },
+  en: {
+    title: '🏠 Smart Home', room1: 'Room 1', room2: 'Room 2 (S3)',
+    door: '🚪 Door', doorOpen: 'Opened today:', openDoor: 'Open Door', sd: '💾 Storage',
+    chart1: 'Room 1 Chart', chart2: 'Room 2 Chart', doorTags: "Today's Tags"
+  }
 };
 
 function applyLang() {
@@ -19,13 +27,14 @@ function applyLang() {
 applyLang();
 
 // Date/time
-setInterval(async () => {
+async function updateDateTime() {
   try {
     const r = await fetch(API+'/api/datetime');
     const d = await r.json();
     document.getElementById('datetime').innerHTML = `📅 ${d.shamsi} | ${d.gregorian}`;
   } catch(e) {}
-}, 1000);
+}
+setInterval(updateDateTime, 1000); updateDateTime();
 
 // Sensors
 async function updateSensors() {
@@ -51,13 +60,13 @@ async function updateSD() {
 }
 setInterval(updateSD, 10000); updateSD();
 
-// Door stats
+// Door
 async function updateDoor() {
   try {
     const r = await fetch(API+'/api/stats/door');
     const s = await r.json();
     document.getElementById('door-total').textContent = s.total;
-    const tbody = document.getElementById('door-tags');
+    const tbody = document.querySelector('#door-tags-table tbody');
     tbody.innerHTML = '';
     s.tags.forEach(tag => tbody.innerHTML += `<tr><td>${tag.tag}</td><td>${tag.count}</td></tr>`);
   } catch(e) {}
@@ -69,20 +78,19 @@ async function updateNodes() {
   try {
     const r = await fetch(API+'/api/nodestatus');
     const d = await r.json();
-    setNodeStatus('node-hub', d.hub_online);
-    setNodeStatus('node-s3', d.s3_online);
-    setNodeStatus('node-door', d.door_online);
+    setNode('node-hub', d.hub_online);
+    setNode('node-s3', d.s3_online);
+    setNode('node-door', d.door_online);
   } catch(e) {}
 }
-setInterval(updateNodes, 5000); updateNodes();
-
-function setNodeStatus(id, online) {
-  const el = document.getElementById(id);
-  if (el) {
-    const dot = el.querySelector('.status');
-    if (dot) dot.style.background = online ? 'var(--green)' : 'var(--red)';
+function setNode(id, online) {
+  const dot = document.getElementById(id)?.querySelector('.status-dot');
+  if (dot) {
+    dot.style.background = online ? 'var(--green)' : 'var(--red)';
+    dot.style.boxShadow = online ? '0 0 10px var(--green)' : '0 0 5px var(--red)';
   }
 }
+setInterval(updateNodes, 5000); updateNodes();
 
 // Charts
 const charts = {};
@@ -94,8 +102,7 @@ async function drawChart(board, canvasId, range) {
     const temps = data.map(d => d.temp);
     const hums = data.map(d => d.humidity);
     if (charts[canvasId]) charts[canvasId].destroy();
-    const ctx = document.getElementById(canvasId).getContext('2d');
-    charts[canvasId] = new Chart(ctx, {
+    charts[canvasId] = new Chart(document.getElementById(canvasId), {
       type: 'line',
       data: {
         labels,
@@ -120,15 +127,15 @@ document.querySelectorAll('.range-select').forEach(sel => {
     const board = sel.dataset.board;
     drawChart(board, board==='esp32_1'?'chart1':'chart2', sel.value);
   });
-  // initial draw
+  // initial
   const board = sel.dataset.board;
   drawChart(board, board==='esp32_1'?'chart1':'chart2', sel.value);
 });
 
-// Door open
+// Open door
 document.getElementById('open-door').addEventListener('click', async () => {
   await fetch(API+'/open');
-  alert(lang==='fa'?'دستور باز کردن درب ارسال شد':'Door opening command sent');
+  alert(lang==='fa'?'دستور باز شدن درب ارسال شد':'Door opening command sent');
 });
 
 // Theme toggle
