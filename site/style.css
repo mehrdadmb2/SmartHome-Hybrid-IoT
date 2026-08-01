@@ -1,28 +1,81 @@
+:root {
+  --bg: #0a0a0f;
+  --text: #e0e0e0;
+  --card-bg: rgba(15, 20, 35, 0.6);
+  --border: rgba(0, 255, 255, 0.3);
+  --neon: #0ff;
+  --pink: #ff00ff;
+  --green: #0f0;
+  --red: #f00;
+}
+[data-theme="light"] {
+  --bg: #f0f0f8;
+  --text: #1a1a2e;
+  --card-bg: rgba(255,255,255,0.7);
+  --border: rgba(0,0,0,0.2);
+  --neon: #0077ff;
+  --pink: #e600e6;
+}
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: Tahoma, sans-serif; background: #0a0a0f; color: #0ff; padding: 1rem; }
-.container { max-width: 1000px; margin: auto; }
-header { text-align: center; margin-bottom: 1.5rem; }
-h1 { color: #f0f; text-shadow: 0 0 10px #f0f; }
-#datetime { color: #0ff; margin-top: 0.5rem; font-size: 1.1rem; }
-
-.node-panel { margin-bottom: 1.5rem; }
-.node-panel h2 { color: #f0f; margin-bottom: 0.5rem; }
-.node-grid { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-.node { background: rgba(0,0,0,0.5); border: 1px solid #0ff; padding: 0.5rem 1rem; border-radius: 0.5rem; }
-.node-status { font-size: 1.2rem; margin-left: 0.5rem; }
-
-.cards { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-bottom: 1.5rem; }
-.card { background: rgba(10,15,25,0.7); border: 1px solid #0ff; border-radius: 0.8rem; padding: 1rem; min-width: 160px; text-align: center; }
-.card h3 { color: #f0f; }
-button { background: #f0f; color: #000; border: none; padding: 0.4rem 0.8rem; border-radius: 0.4rem; cursor: pointer; margin-top: 0.5rem; }
-
-.charts { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-bottom: 1.5rem; }
-.chart-box { background: rgba(10,15,25,0.7); border: 1px solid #0ff; border-radius: 0.8rem; padding: 1rem; flex: 1 1 45%; min-width: 300px; }
-.chart-box canvas { max-height: 250px; }
-select { background: #000; color: #0ff; border: 1px solid #0ff; padding: 0.3rem; border-radius: 0.3rem; margin-bottom: 0.5rem; }
-
-.door-stats { background: rgba(10,15,25,0.7); border: 1px solid #0ff; border-radius: 0.8rem; padding: 1rem; }
-.door-stats h3 { color: #f0f; margin-bottom: 0.5rem; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border: 1px solid rgba(0,255,255,0.2); padding: 0.3rem; text-align: center; }
-th { background: rgba(0,0,0,0.4); color: #f0f; }
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.3s, color 0.3s;
+  overflow-x: hidden;
+}
+.bg-anim {
+  position: fixed; top:0; left:0; width:100%; height:100%;
+  background: linear-gradient(45deg, #000, #111);
+  z-index: -1;
+}
+.container { max-width: 1100px; margin: 2rem auto; padding: 1rem; }
+.glass {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  padding: 1.2rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+header { text-align: center; }
+.neon-text {
+  font-size: 2.5rem;
+  color: var(--pink);
+  text-shadow: 0 0 10px var(--pink), 0 0 20px var(--pink);
+}
+.datetime { font-size: 1.2rem; color: var(--neon); margin: 0.5rem 0; }
+.controls { margin-top: 1rem; }
+.controls button {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  padding: 0.4rem 0.8rem; border-radius: 0.5rem; cursor: pointer; margin: 0 0.3rem;
+  backdrop-filter: blur(5px);
+}
+.status-cards {
+  display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;
+}
+.card {
+  flex: 1 1 200px; min-width: 160px; text-align: center;
+  padding: 1rem; border-radius: 1rem;
+}
+.card h3 { color: var(--pink); margin-bottom: 0.5rem; }
+.node-panel .nodes {
+  display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap;
+}
+.node .status {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  margin-left: 5px; background: var(--green);
+}
+.charts-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1rem;
+}
+.chart-card canvas { max-height: 250px; }
+.range-select {
+  background: rgba(0,0,0,0.5); border: 1px solid var(--border); color: var(--text);
+  padding: 0.3rem; border-radius: 0.3rem; margin-bottom: 0.5rem;
+}
+.door-table table { width:100%; border-collapse: collapse; margin-top:0.5rem; }
+th, td { border:1px solid var(--border); padding:0.4rem; text-align:center; }
+th { background: rgba(0,0,0,0.3); }
