@@ -1,43 +1,36 @@
 const API = window.location.origin;
+let lang = localStorage.getItem('lang') || 'fa';
+let theme = localStorage.getItem('theme') || 'dark';
+document.documentElement.setAttribute('data-theme', theme);
+document.documentElement.lang = lang;
+document.dir = lang === 'fa' ? 'rtl' : 'ltr';
 
-// تاریخ شمسی
-function updateDateTime() {
-  fetch(API + '/api/datetime')
-    .then(r => r.json())
-    .then(d => {
-      document.getElementById('datetime').textContent = '📅 ' + d.shamsi + ' | ' + d.gregorian;
-    })
-    .catch(() => {
-      document.getElementById('datetime').textContent = 'ساعت در دسترس نیست';
-    });
+const translations = {
+  fa: { title: '🏠 خانه هوشمند', room1: 'اتاق ۱', room2: 'اتاق ۲ (S3)', door: '🚪 درب', doorOpen: 'باز شدن امروز:', openDoor: 'باز کردن درب', sd: '💾 حافظه', nodes: 'وضعیت نودها', chart1: 'نمودار اتاق ۱', chart2: 'نمودار اتاق ۲', doorTags: 'تگ‌های امروز' },
+  en: { title: '🏠 Smart Home', room1: 'Room 1', room2: 'Room 2 (S3)', door: '🚪 Door', doorOpen: 'Opened today:', openDoor: 'Open Door', sd: '💾 Storage', nodes: 'Node Status', chart1: 'Room 1 Chart', chart2: 'Room 2 Chart', doorTags: 'Today Tags' }
+};
+
+function applyLang() {
+  document.querySelectorAll('[data-lang]').forEach(el => {
+    const key = el.dataset.lang;
+    if (translations[lang][key]) el.textContent = translations[lang][key];
+  });
 }
-setInterval(updateDateTime, 1000);
-updateDateTime();
+applyLang();
 
-// وضعیت نودها
-async function updateNodeStatus() {
+// Date/time
+setInterval(async () => {
   try {
-    const r = await fetch(API + '/api/nodestatus');
+    const r = await fetch(API+'/api/datetime');
     const d = await r.json();
-    const setStatus = (id, online) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.textContent = online ? '● آنلاین' : '○ آفلاین';
-        el.style.color = online ? '#0f0' : '#f00';
-      }
-    };
-    setStatus('status-hub', d.hub_online);
-    setStatus('status-s3', d.s3_online);
-    setStatus('status-door', d.door_online);
+    document.getElementById('datetime').innerHTML = `📅 ${d.shamsi} | ${d.gregorian}`;
   } catch(e) {}
-}
-setInterval(updateNodeStatus, 5000);
-updateNodeStatus();
+}, 1000);
 
-// وضعیت سنسورها
+// Sensors
 async function updateSensors() {
   try {
-    const r = await fetch(API + '/api/current');
+    const r = await fetch(API+'/api/current');
     const d = await r.json();
     document.getElementById('t1').textContent = d.esp32_1_temp.toFixed(1);
     document.getElementById('h1').textContent = d.esp32_1_hum.toFixed(0);
@@ -45,54 +38,61 @@ async function updateSensors() {
     document.getElementById('h2').textContent = d.esp32_s3_hum.toFixed(0);
   } catch(e) {}
 }
-setInterval(updateSensors, 5000);
-updateSensors();
+setInterval(updateSensors, 5000); updateSensors();
 
-// SD info
+// SD
 async function updateSD() {
   try {
-    const r = await fetch(API + '/api/sdinfo');
+    const r = await fetch(API+'/api/sdinfo');
     const d = await r.json();
     document.getElementById('sd-total').textContent = d.total_mb;
     document.getElementById('sd-free').textContent = d.free_mb;
   } catch(e) {}
 }
-setInterval(updateSD, 10000);
-updateSD();
+setInterval(updateSD, 10000); updateSD();
 
-// درب
-async function updateDoorStats() {
+// Door stats
+async function updateDoor() {
   try {
-    const r = await fetch(API + '/api/stats/door');
+    const r = await fetch(API+'/api/stats/door');
     const s = await r.json();
     document.getElementById('door-total').textContent = s.total;
-    const tbody = document.querySelector('#door-table tbody');
+    const tbody = document.getElementById('door-tags');
     tbody.innerHTML = '';
-    s.tags.forEach(tag => {
-      tbody.innerHTML += `<tr><td>${tag.tag}</td><td>${tag.count}</td></tr>`;
-    });
+    s.tags.forEach(tag => tbody.innerHTML += `<tr><td>${tag.tag}</td><td>${tag.count}</td></tr>`);
   } catch(e) {}
 }
-setInterval(updateDoorStats, 10000);
-updateDoorStats();
+setInterval(updateDoor, 10000); updateDoor();
 
-// باز کردن درب
-async function openDoor() {
-  await fetch(API + '/open');
-  alert('دستور باز شدن درب ارسال شد');
+// Nodes
+async function updateNodes() {
+  try {
+    const r = await fetch(API+'/api/nodestatus');
+    const d = await r.json();
+    setNodeStatus('node-hub', d.hub_online);
+    setNodeStatus('node-s3', d.s3_online);
+    setNodeStatus('node-door', d.door_online);
+  } catch(e) {}
+}
+setInterval(updateNodes, 5000); updateNodes();
+
+function setNodeStatus(id, online) {
+  const el = document.getElementById(id);
+  if (el) {
+    const dot = el.querySelector('.status');
+    if (dot) dot.style.background = online ? 'var(--green)' : 'var(--red)';
+  }
 }
 
-// نمودارها
+// Charts
 const charts = {};
-async function drawChart(board, canvasId, rangeId) {
-  const range = document.getElementById(rangeId).value;
+async function drawChart(board, canvasId, range) {
   try {
-    const r = await fetch(API + `/api/data?board=${board}&range=${range}`);
+    const r = await fetch(`${API}/api/data?board=${board}&range=${range}`);
     const data = await r.json();
     const labels = data.map(d => d.time);
     const temps = data.map(d => d.temp);
     const hums = data.map(d => d.humidity);
-
     if (charts[canvasId]) charts[canvasId].destroy();
     const ctx = document.getElementById(canvasId).getContext('2d');
     charts[canvasId] = new Chart(ctx, {
@@ -100,23 +100,49 @@ async function drawChart(board, canvasId, rangeId) {
       data: {
         labels,
         datasets: [
-          { label: 'دما (°C)', data: temps, borderColor: '#ff6ec7', yAxisID: 'y-temp' },
-          { label: 'رطوبت (%)', data: hums, borderColor: '#3b8dff', yAxisID: 'y-hum' }
+          { label: 'دما (°C)', data: temps, borderColor: '#ff6ec7', backgroundColor: 'rgba(255,110,199,0.2)', yAxisID: 'y' },
+          { label: 'رطوبت (%)', data: hums, borderColor: '#0ff', backgroundColor: 'rgba(0,255,255,0.2)', yAxisID: 'y1' }
         ]
       },
       options: {
         responsive: true,
         scales: {
-          'y-temp': { type: 'linear', position: 'left', title: { display: true, text: 'دما' } },
-          'y-hum': { type: 'linear', position: 'right', title: { display: true, text: 'رطوبت' }, grid: { drawOnChartArea: false } }
+          y: { type:'linear', position:'left', title:{display:true, text:'دما'} },
+          y1: { type:'linear', position:'right', title:{display:true, text:'رطوبت'}, grid:{drawOnChartArea:false} }
         }
       }
     });
-  } catch(e) {
-    console.error('Chart error:', e);
-  }
+  } catch(e) { console.error(e); }
 }
 
-// بارگذاری اولیه
-drawChart('esp32_1', 'chart1', 'range1');
-drawChart('esp32_s3', 'chart2', 'range2');
+document.querySelectorAll('.range-select').forEach(sel => {
+  sel.addEventListener('change', () => {
+    const board = sel.dataset.board;
+    drawChart(board, board==='esp32_1'?'chart1':'chart2', sel.value);
+  });
+  // initial draw
+  const board = sel.dataset.board;
+  drawChart(board, board==='esp32_1'?'chart1':'chart2', sel.value);
+});
+
+// Door open
+document.getElementById('open-door').addEventListener('click', async () => {
+  await fetch(API+'/open');
+  alert(lang==='fa'?'دستور باز کردن درب ارسال شد':'Door opening command sent');
+});
+
+// Theme toggle
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+});
+
+// Language toggle
+document.getElementById('lang-toggle').addEventListener('click', () => {
+  lang = lang === 'fa' ? 'en' : 'fa';
+  document.documentElement.lang = lang;
+  document.dir = lang === 'fa' ? 'rtl' : 'ltr';
+  localStorage.setItem('lang', lang);
+  applyLang();
+});
