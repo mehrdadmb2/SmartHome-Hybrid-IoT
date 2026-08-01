@@ -1,5 +1,5 @@
 /*
- * SmartHome-Hybrid-IoT - ESP32 Hub (OLED زیبا + رفع WDT)
+ * SmartHome-Hybrid-IoT - ESP32 Hub (OLED اصلاح‌شده – فونت کوچک، همیشه روشن)
  * آی‌پی: 192.168.1.119 | DNS: 8.8.8.8, 8.8.4.4 | NTP: 178.22.122.100
  * پین‌ها: SDA=5,SCL=4 | DHT22=13 | SD: CS=15,MOSI=12,MISO=14,SCK=2 | UART: RX2=16,TX2=17
  */
@@ -71,6 +71,10 @@ const unsigned long POLL_INTERVAL = 10000;
 
 const size_t MAX_CSV_SIZE = 1900; // 1.9 کیلوبایت
 
+// متغیرهای رشته‌ای برای OLED (تاریخ و ساعت)
+char oledDate[12] = "----/--/--";
+char oledTime[9]  = "--:--:--";
+
 // ---------- تاریخ شمسی ----------
 struct JalaliDate { int year, month, day; };
 JalaliDate gregorianToJalali(int gy, int gm, int gd) {
@@ -126,8 +130,15 @@ void setup() {
   timeClient.update();
   dht.begin();
 
-  // (Watchdog برداشته شد – با حجم فایل‌های کم دیگر ریست نمی‌شود)
+  // اولین خواندن سنسور (اختیاری، برای نمایش اولیه)
+  float t = dht.readTemperature();
+  float h = dht.readHumidity();
+  if (!isnan(t) && !isnan(h)) {
+    localTemp = t;
+    localHum = h;
+  }
 
+  // دانلود فایل‌های سایت
   if (WiFi.status() == WL_CONNECTED) {
     const char* files[] = {"index.html", "style.css", "app.js", "Chart.min.js"};
     for (auto filename : files) {
@@ -351,6 +362,19 @@ void setupServer() {
 
 // ---------- حلقه اصلی ----------
 void loop() {
+  // بروزرسانی تاریخ و ساعت (هر ۱ ثانیه)
+  static unsigned long lastTimeUpdate = 0;
+  if (millis() - lastTimeUpdate >= 1000) {
+    lastTimeUpdate = millis();
+    timeClient.update();
+    time_t now = timeClient.getEpochTime();
+    struct tm *t = localtime(&now);
+    JalaliDate j = gregorianToJalali(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday);
+    sprintf(oledDate, "%04d/%02d/%02d", j.year, j.month, j.day);
+    sprintf(oledTime, "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+  }
+
+  // خواندن سنسور محلی هر ۵ ثانیه
   static unsigned long lastLocalRead = 0;
   if (millis() - lastLocalRead >= 5000) {
     lastLocalRead = millis();
@@ -358,11 +382,16 @@ void loop() {
     float h = dht.readHumidity();
     if (!isnan(t) && !isnan(h)) {
       localTemp = t; localHum = h;
-      updateOLED(t, h);
+      Serial.printf("DHT: %.1f°C, %.1f%%\n", t, h);
       logSensorCSV("esp32_1", t, h);
       checkAndCleanSD();
+    } else {
+      Serial.println("DHT read failed – using last values");
     }
   }
+
+  // به‌روزرسانی OLED (همیشه، حتی اگر سنسور خطا بدهد)
+  updateOLED(localTemp, localHum);
 
   while (Serial2.available()) {
     String line = Serial2.readStringUntil('\n'); line.trim();
@@ -649,52 +678,34 @@ String readFile(const char* path) {
   return s;
 }
 
-/* ========== نمایشگر OLED زیبا ========== */
+/* ========== نمایشگر OLED (فونت کوچک، همیشه روشن) ========== */
 void updateOLED(float t, float h) {
   display.clearDisplay();
-  
-  // کادر بیرونی
   display.drawRect(0, 0, 128, 64, SSD1306_WHITE);
-  
-  // خط جدا کننده بالایی (زیر دما و رطوبت)
   display.drawLine(0, 34, 128, 34, SSD1306_WHITE);
-  
-  // ---------- بخش دما و رطوبت (فونت بزرگ) ----------
-  display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(5, 6);
-  display.printf("%.1f", t);
-  display.setCursor(70, 6);
-  display.printf("%.1f", h);
-  
+
+  // ---------- دما ----------
   display.setTextSize(1);
-  display.setCursor(55, 10);
-  display.print("oC");
-  display.setCursor(120, 10);
+  display.setCursor(6, 10);
+  display.print("Temp:");
+  display.setCursor(48, 10);
+  display.print(t, 1);
+  display.print("C");
+
+  // ---------- رطوبت ----------
+  display.setCursor(6, 24);
+  display.print("Hum :");
+  display.setCursor(48, 24);
+  display.print(h, 1);
   display.print("%");
-  
-  // ---------- بخش تاریخ و ساعت و IP ----------
-  display.setTextSize(1);
-  display.setCursor(2, 36);
-  
-  // دریافت زمان و تاریخ شمسی
-  timeClient.update();
-  time_t now = timeClient.getEpochTime();
-  struct tm *timeinfo = localtime(&now);
-  JalaliDate j = gregorianToJalali(timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday);
-  
-  char dateBuf[12];
-  sprintf(dateBuf, "%04d/%02d/%02d", j.year, j.month, j.day);
-  display.print(dateBuf);
-  
-  char timeBuf[9];
-  sprintf(timeBuf, "%02d:%02d:%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-  display.setCursor(80, 36);
-  display.print(timeBuf);
-  
-  // IP
-  display.setCursor(2, 50);
-  display.print(WiFi.localIP());
+
+  // ---------- تاریخ و ساعت ----------
+  display.setCursor(6, 40);
+  display.print(oledDate);
+  display.setCursor(72, 40);
+  display.print(oledTime);
+
+  display.display();
 }
 
 String getISODate() {
