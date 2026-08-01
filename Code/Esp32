@@ -1,7 +1,8 @@
 /*
- * SmartHome-Hybrid-IoT - ESP32 Hub (Polling S3 + Node Status + Selective Download)
+ * SmartHome-Hybrid-IoT - ESP32 Hub (رفع Stack Overflow + تمام امکانات)
  * آی‌پی: 192.168.1.119
  * DNS: 8.8.8.8, 8.8.4.4
+ * NTP: 178.22.122.100 (ایران)
  * پین‌ها:
  *  I2C OLED 128x64: SDA=5, SCL=4
  *  DHT22: 13
@@ -34,7 +35,7 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress dns1(8, 8, 8, 8);
 IPAddress dns2(8, 8, 4, 4);
 
-// ---------- گیت‌هاب (jsDelivr برای دانلود، api.github.com برای آپلود) ----------
+// ---------- گیت‌هاب ----------
 String githubUser   = "mehrdadmb2";
 String githubRepo   = "SmartHome-Hybrid-IoT";
 String githubBranch = "main";
@@ -66,30 +67,33 @@ AsyncWebServer server(80);
 // داده‌های سنسورها
 float localTemp = 0, localHum = 0;
 float s3Temp = 0, s3Hum = 0;
-unsigned long lastS3Data = 0;      // زمان آخرین دریافت موفق از S3
+unsigned long lastS3Data = 0;
 unsigned long lastDoorEvent = 0;
-const unsigned long NODE_TIMEOUT = 600; // ۱۰ دقیقه تا آفلاین شدن
+const unsigned long NODE_TIMEOUT = 600; // ۱۰ دقیقه
 
-// زمان‌بندی‌ها
 unsigned long lastGitPush = 0;
-const unsigned long PUSH_INTERVAL = 30 * 60 * 1000;  // ۳۰ دقیقه
+const unsigned long PUSH_INTERVAL = 5 * 60 * 1000;  // ۵ دقیقه (قابل تغییر)
 unsigned long lastS3Poll = 0;
 const unsigned long POLL_INTERVAL = 10000;           // ۱۰ ثانیه
 
+// ---------- JSON Documents (global برای جلوگیری از Stack Overflow) ----------
+DynamicJsonDocument dataRangeDoc(16384); // برای getDataRange
+DynamicJsonDocument statsDoc(4096);      // آمار درب
+DynamicJsonDocument sdDoc(256);          // sdinfo
+DynamicJsonDocument dateDoc(128);        // datetime
+DynamicJsonDocument nodeDoc(256);        // nodestatus
+DynamicJsonDocument pushDoc(1024);       // کمکی push
+
 // ---------- تاریخ شمسی ----------
 struct JalaliDate { int year, month, day; };
-JalaliDate gregorianToJalali(int g_y, int g_m, int g_d) {
-  int gy = g_y, gm = g_m, gd = g_d;
+JalaliDate gregorianToJalali(int gy, int gm, int gd) {
   int gy2 = (gm > 2) ? (gy + 1) : gy;
   int days = 355666 + (365 * gy) + ((gy2 + 3) / 4) - ((gy2 + 99) / 100) + ((gy2 + 399) / 400) + gd + (153 * (gm > 2 ? (gm - 3) : (gm + 9)) + 2) / 5;
   int jy = -1595 + (33 * (days / 12053));
   days %= 12053;
   jy += 4 * (days / 1461);
   days %= 1461;
-  if (days > 365) {
-    jy += (days - 1) / 365;
-    days = (days - 1) % 365;
-  }
+  if (days > 365) { jy += (days - 1) / 365; days = (days - 1) % 365; }
   int jm = (days < 186) ? 1 + days / 31 : 7 + (days - 186) / 30;
   int jd = 1 + ((days < 186) ? (days % 31) : ((days - 186) % 30));
   return {jy, jm, jd};
@@ -146,7 +150,7 @@ void setup() {
   // DHT22
   dht.begin();
 
-  // دانلود فایل‌های سایت از jsDelivr (فقط در صورت موفقیت بازنویسی)
+  // دانلود فایل‌های سایت (در صورت موفقیت بازنویسی، در غیر این صورت حفظ نسخه قدیمی)
   if (WiFi.status() == WL_CONNECTED) {
     const char* files[] = {"index.html", "style.css", "app.js", "Chart.min.js"};
     for (auto filename : files) {
@@ -158,7 +162,6 @@ void setup() {
       if (code == 200) {
         String content = http.getString();
         String path = "/www/" + String(filename);
-        // حذف فایل قبلی فقط در صورت موفقیت
         if (SD.exists(path)) SD.remove(path);
         File f = SD.open(path, FILE_WRITE);
         if (f) {
@@ -176,7 +179,7 @@ void setup() {
     }
   }
 
-  // اگر index.html وجود نداشت، یک پیش‌فرض ایجاد کن
+  // ایجاد یک index.html پیش‌فرض در صورت نبود
   if (!SD.exists("/www/index.html")) {
     File f = SD.open("/www/index.html", FILE_WRITE);
     if (f) {
@@ -220,7 +223,7 @@ void setupServer() {
   });
 
   server.on("/api/current", HTTP_GET, [](AsyncWebServerRequest *request){
-    DynamicJsonDocument doc(300);
+    StaticJsonDocument<300> doc;
     doc["esp32_1_temp"] = localTemp;
     doc["esp32_1_hum"] = localHum;
     doc["esp32_s3_temp"] = s3Temp;
@@ -230,12 +233,12 @@ void setupServer() {
   });
 
   server.on("/api/nodestatus", HTTP_GET, [](AsyncWebServerRequest *request){
-    DynamicJsonDocument doc(256);
-    doc["hub_online"] = true;
+    nodeDoc.clear();
+    nodeDoc["hub_online"] = true;
     unsigned long now = millis();
-    doc["s3_online"] = (lastS3Data == 0) ? false : (now - lastS3Data < NODE_TIMEOUT * 1000);
-    doc["door_online"] = (lastDoorEvent == 0) ? false : (now - lastDoorEvent < NODE_TIMEOUT * 1000);
-    String out; serializeJson(doc, out);
+    nodeDoc["s3_online"] = (lastS3Data == 0) ? false : (now - lastS3Data < NODE_TIMEOUT * 1000);
+    nodeDoc["door_online"] = (lastDoorEvent == 0) ? false : (now - lastDoorEvent < NODE_TIMEOUT * 1000);
+    String out; serializeJson(nodeDoc, out);
     request->send(200, "application/json", out);
   });
 
@@ -251,7 +254,14 @@ void setupServer() {
     String date = request->hasParam("date") ? request->getParam("date")->value() : getISODate();
     String filename = "/data/door_" + date + ".csv";
     File f = SD.open(filename);
-    if (!f) { request->send(200, "application/json", "{\"total\":0,\"tags\":[]}"); return; }
+    if (!f) {
+      statsDoc.clear();
+      statsDoc["total"] = 0;
+      statsDoc["tags"] = JsonArray();
+      String out; serializeJson(statsDoc, out);
+      request->send(200, "application/json", out);
+      return;
+    }
     f.readStringUntil('\n');
     std::map<String, int> tagCount;
     int total = 0;
@@ -263,24 +273,25 @@ void setupServer() {
       tagCount[tag]++; total++;
     }
     f.close();
-    DynamicJsonDocument outDoc(4096);
-    outDoc["date"] = date;
-    outDoc["total"] = total;
-    JsonArray tags = outDoc.createNestedArray("tags");
+
+    statsDoc.clear();
+    statsDoc["date"] = date;
+    statsDoc["total"] = total;
+    JsonArray tags = statsDoc.createNestedArray("tags");
     for (auto &p : tagCount) {
       JsonObject o = tags.createNestedObject();
       o["tag"] = p.first; o["count"] = p.second;
     }
-    String out; serializeJson(outDoc, out);
+    String out; serializeJson(statsDoc, out);
     request->send(200, "application/json", out);
   });
 
   server.on("/api/sdinfo", HTTP_GET, [](AsyncWebServerRequest *request){
-    DynamicJsonDocument doc(256);
-    doc["total_mb"] = SD.totalBytes() / (1024*1024);
-    doc["used_mb"] = SD.usedBytes() / (1024*1024);
-    doc["free_mb"] = (SD.totalBytes() - SD.usedBytes()) / (1024*1024);
-    String out; serializeJson(doc, out);
+    sdDoc.clear();
+    sdDoc["total_mb"] = SD.totalBytes() / (1024*1024);
+    sdDoc["used_mb"] = SD.usedBytes() / (1024*1024);
+    sdDoc["free_mb"] = (SD.totalBytes() - SD.usedBytes()) / (1024*1024);
+    String out; serializeJson(sdDoc, out);
     request->send(200, "application/json", out);
   });
 
@@ -291,10 +302,10 @@ void setupServer() {
     char greg[20]; sprintf(greg, "%04d-%02d-%02d %02d:%02d:%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
     JalaliDate j = gregorianToJalali(t->tm_year+1900, t->tm_mon+1, t->tm_mday);
     char shamsi[20]; sprintf(shamsi, "%04d-%02d-%02d %02d:%02d:%02d", j.year, j.month, j.day, t->tm_hour, t->tm_min, t->tm_sec);
-    DynamicJsonDocument doc(128);
-    doc["gregorian"] = greg;
-    doc["shamsi"] = shamsi;
-    String out; serializeJson(doc, out);
+    dateDoc.clear();
+    dateDoc["gregorian"] = greg;
+    dateDoc["shamsi"] = shamsi;
+    String out; serializeJson(dateDoc, out);
     request->send(200, "application/json", out);
   });
 
@@ -392,7 +403,7 @@ void appendCSV(const String& filename, const String& line, const String& header)
   if (f) { f.println(line); f.close(); }
 }
 
-// ---------- بازه‌های زمانی ----------
+// ---------- بازه‌های زمانی (اصلاح‌شده با global doc) ----------
 String getDataRange(const String& board, const String& range, const String& refDate) {
   std::vector<String> dates;
   if (range == "daily") {
@@ -414,8 +425,8 @@ String getDataRange(const String& board, const String& range, const String& refD
     std::reverse(dates.begin(), dates.end());
   }
 
-  DynamicJsonDocument doc(32768);
-  JsonArray arr = doc.to<JsonArray>();
+  dataRangeDoc.clear();
+  JsonArray arr = dataRangeDoc.to<JsonArray>();
 
   for (auto date : dates) {
     String filename = "/data/" + board + "_" + date + ".csv";
@@ -423,7 +434,7 @@ String getDataRange(const String& board, const String& range, const String& refD
     File f = SD.open(filename);
     if (!f) continue;
     f.readStringUntil('\n');
-    while (f.available()) {
+    while (f.available() && !arr.isNull()) {
       String line = f.readStringUntil('\n'); line.trim();
       if (line.isEmpty()) continue;
       JsonObject obj = arr.createNestedObject();
@@ -432,6 +443,7 @@ String getDataRange(const String& board, const String& range, const String& refD
       obj["time"] = line.substring(0, c1);
       obj["temp"] = line.substring(c1+1, c2).toFloat();
       obj["humidity"] = line.substring(c2+1).toFloat();
+      if (arr.size() > 1000) break; // محدودیت برای جلوگیری از overflow
     }
     f.close();
   }
@@ -442,16 +454,17 @@ String getDataRange(const String& board, const String& range, const String& refD
     int m = lastTime.substring(3,5).toInt();
     int s = lastTime.substring(6).toInt();
     int cutoffSec = h*3600 + m*60 + s - 3600;
-    JsonArray filtered = doc.createNestedArray("filtered");
-    for (JsonObject o : arr) {
-      String t = o["time"];
+    int i = 0;
+    while (i < arr.size()) {
+      String t = arr[i]["time"];
       int sec = t.substring(0,2).toInt()*3600 + t.substring(3,5).toInt()*60 + t.substring(6).toInt();
-      if (sec >= cutoffSec) filtered.add(o);
+      if (sec < cutoffSec) arr.remove(i);
+      else i++;
     }
-    arr = filtered;
   }
 
-  String out; serializeJson(doc, out);
+  String out;
+  serializeJson(dataRangeDoc, out);
   return out;
 }
 
@@ -501,11 +514,11 @@ void pushToGitHub() {
     delay(1000);
   }
 
-  DynamicJsonDocument sdoc(256);
-  sdoc["total_mb"] = SD.totalBytes()/(1024*1024);
-  sdoc["used_mb"] = SD.usedBytes()/(1024*1024);
-  sdoc["free_mb"] = (SD.totalBytes() - SD.usedBytes())/(1024*1024);
-  String sdjson; serializeJson(sdoc, sdjson);
+  sdDoc.clear();
+  sdDoc["total_mb"] = SD.totalBytes()/(1024*1024);
+  sdDoc["used_mb"] = SD.usedBytes()/(1024*1024);
+  sdDoc["free_mb"] = (SD.totalBytes() - SD.usedBytes())/(1024*1024);
+  String sdjson; serializeJson(sdDoc, sdjson);
   String sha = getGitSHA("sdinfo.json");
   addGitHubFile("sdinfo.json", sdjson, sha);
 
@@ -521,14 +534,14 @@ void pushToGitHub() {
     return String(buf);
   };
 
-  DynamicJsonDocument ndoc(512);
-  ndoc["hub_last_push"] = epochToISO(millis());
-  ndoc["sensor_s3_last_data"] = (lastS3Data == 0) ? "never" : epochToISO(lastS3Data);
-  ndoc["door_last_event"] = (lastDoorEvent == 0) ? "never" : epochToISO(lastDoorEvent);
-  ndoc["hub_online"] = true;
-  ndoc["s3_online"] = s3online;
-  ndoc["door_online"] = dooronline;
-  String njson; serializeJson(ndoc, njson);
+  nodeDoc.clear();
+  nodeDoc["hub_last_push"] = epochToISO(millis());
+  nodeDoc["sensor_s3_last_data"] = (lastS3Data == 0) ? "never" : epochToISO(lastS3Data);
+  nodeDoc["door_last_event"] = (lastDoorEvent == 0) ? "never" : epochToISO(lastDoorEvent);
+  nodeDoc["hub_online"] = true;
+  nodeDoc["s3_online"] = s3online;
+  nodeDoc["door_online"] = dooronline;
+  String njson; serializeJson(nodeDoc, njson);
   sha = getGitSHA("node_status.json");
   addGitHubFile("node_status.json", njson, sha);
 }
@@ -565,12 +578,12 @@ void addGitHubFile(const String& path, const String& content, const String& sha)
   http.addHeader("User-Agent", "ESP32-Hub");
   http.addHeader("Content-Type", "application/json");
 
-  DynamicJsonDocument doc(1024);
-  doc["message"] = "auto update";
-  doc["content"] = b64;
-  doc["branch"] = githubBranch;
-  if (sha.length() > 0) doc["sha"] = sha;
-  String body; serializeJson(doc, body);
+  pushDoc.clear();
+  pushDoc["message"] = "auto update";
+  pushDoc["content"] = b64;
+  pushDoc["branch"] = githubBranch;
+  if (sha.length() > 0) pushDoc["sha"] = sha;
+  String body; serializeJson(pushDoc, body);
 
   int code = http.PUT(body);
   Serial.printf("GitHub PUT %s -> %d\n", path.c_str(), code);
